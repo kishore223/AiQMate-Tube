@@ -71,6 +71,10 @@ function VideoCard({ meta, onPlay, onToggleSubscribe, isSubbed }) {
         <div className="video-info">
           <span className="tag tag-channel">{meta.channelName || 'Unknown'}</span>
           <span>•</span>
+          <span>{meta.views || 0} views</span>
+          <span>•</span>
+          <span>{meta.likes || 0} likes</span>
+          <span>•</span>
           <span>{new Date(meta.createdAt).toLocaleDateString()}</span>
           {meta.type === 'reel' && (
             <><span>•</span><span className="tag tag-reel">Reel</span></>

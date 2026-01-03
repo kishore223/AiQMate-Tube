@@ -17,7 +17,11 @@ import {
   onSnapshot,
   query,
   doc,
-  setDoc
+  setDoc,
+  updateDoc,
+  increment,
+  deleteDoc,
+  getDoc
 } from 'firebase/firestore';
 import {
   ref,
@@ -340,11 +344,70 @@ function VideoPlayer({ meta, onClose, subscriptions, onToggleSubscribe, userId }
   const [tracked, setTracked] = React.useState(false);
   const videoRef = React.useRef(null);
   const isSubbed = subscriptions.includes(meta.channelName);
+  const startTimeRef = React.useRef(Date.now());
+
+  const [liked, setLiked] = React.useState(false);
+  const [likeCount, setLikeCount] = React.useState(meta.likes || 0);
 
   React.useEffect(() => {
-    const timer = setTimeout(() => { try { videoRef.current?.play(); } catch { } }, 100);
+    if (!userId || !meta.id) return;
+    const likeRef = doc(db, 'users', userId, 'likedVideos', meta.id);
+    const unsub = onSnapshot(likeRef, (snap) => {
+      setLiked(snap.exists());
+    });
+    // Listen to video changes for realtime views/likes updates
+    const videoRefDoc = doc(db, 'videos', meta.id);
+    const unsubVideo = onSnapshot(videoRefDoc, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setLikeCount(data.likes || 0);
+      }
+    });
+
+    return () => {
+      unsub();
+      unsubVideo();
+    };
+  }, [userId, meta.id]);
+
+  async function handleLike() {
+    if (!userId) return alert("Sign in to like.");
+    const videoRefDoc = doc(db, 'videos', meta.id);
+    const userLikeRef = doc(db, 'users', userId, 'likedVideos', meta.id);
+
+    try {
+      if (liked) {
+        await deleteDoc(userLikeRef);
+        await updateDoc(videoRefDoc, { likes: increment(-1) });
+      } else {
+        await setDoc(userLikeRef, { likedAt: new Date().toISOString() });
+        await updateDoc(videoRefDoc, { likes: increment(1) });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        videoRef.current?.play();
+        trackView();
+      } catch { }
+    }, 100);
     return () => clearTimeout(timer);
   }, []);
+
+  async function trackView() {
+    try {
+      await updateDoc(doc(db, 'videos', meta.id), {
+        views: increment(1),
+        lastViewedAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.error('Error tracking view:', e);
+    }
+  }
 
   async function onTime() {
     const v = videoRef.current;
@@ -352,14 +415,25 @@ function VideoPlayer({ meta, onClose, subscriptions, onToggleSubscribe, userId }
     const progress = v.duration ? (v.currentTime / v.duration) : 0;
     if (v.currentTime >= 5 || progress >= 0.5) {
       try {
+        const watchTime = Math.floor((Date.now() - startTimeRef.current) / 1000);
         await addDoc(collection(db, 'users', userId, 'history'), {
           videoId: meta.id,
           title: meta.title,
           channelName: meta.channelName || 'Unknown',
+          thumbnail: meta.url,
           watchedAt: new Date().toISOString(),
-          progress: Math.min(1, progress)
+          progress: Math.min(1, progress),
+          watchTime: watchTime,
+          videoType: meta.type || 'standard'
         });
-      } catch (e) { }
+
+        await updateDoc(doc(db, 'videos', meta.id), {
+          watchTime: increment(watchTime),
+          completions: progress >= 0.9 ? increment(1) : increment(0)
+        });
+      } catch (e) {
+        console.error('Error tracking history:', e);
+      }
       setTracked(true);
     }
   }
@@ -370,9 +444,17 @@ function VideoPlayer({ meta, onClose, subscriptions, onToggleSubscribe, userId }
         <div className="player-header">
           <div className="player-info">
             <h2 className="player-title">{meta.title}</h2>
-            <div className="player-meta"><span className="tag tag-channel">{meta.channelName}</span></div>
+            <div className="player-meta">
+              <span className="tag tag-channel">{meta.channelName}</span>
+              <span style={{ marginLeft: 12, fontSize: 13, opacity: 0.8 }}>
+                {meta.views || 0} views • {likeCount} likes
+              </span>
+            </div>
           </div>
           <div className="player-actions">
+            <button className={`btn ${liked ? 'btn-primary' : 'btn-secondary'}`} onClick={handleLike}>
+              {liked ? 'Liked' : 'Like'} ({likeCount})
+            </button>
             {meta.channelName && meta.channelName !== 'You' && (
               <button className="btn btn-secondary" onClick={() => onToggleSubscribe(meta.channelName)}>{isSubbed ? 'Unsub' : 'Subscribe'}</button>
             )}
@@ -484,7 +566,12 @@ export default function App() {
       url: downloadURL,
       storagePath: fileName,
       published: false,
-      collaborators: []
+      collaborators: [],
+      views: 0,
+      watchTime: 0,
+      completions: 0,
+      likes: 0,
+      shares: 0
     });
 
     setActive('media');
@@ -538,9 +625,9 @@ export default function App() {
         <Header page={active} onAdd={() => setShowAdd(true)} user={user} />
         <div className="content">
           {active === 'home' && <Home videos={homeVideos} {...pageProps} />}
-          {active === 'reels' && <Reels videos={reelsVideos} {...pageProps} />}
+          {active === 'reels' && <Reels videos={reelsVideos} {...pageProps} userId={user.uid} />}
           {active === 'media' && <Media videos={videos} {...pageProps} />}
-          {active === 'history' && <History userId={user.uid} onReplay={(id) => { const v = videos.find(vid => vid.id === id); if (v) setPlaying(v); }} />}
+          {active === 'history' && <History userId={user.uid} videos={videos} onReplay={setPlaying} />}
           {active === 'subs' && <Subscriptions videos={homeVideos} {...pageProps} />}
           {active === 'profile' && <Profile videos={videos} subscriptions={subscriptions} user={user} />}
           {active === 'admin' && <Admin user={user} />}

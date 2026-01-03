@@ -304,6 +304,34 @@ function VideoManagementTab({ currentUser }) {
                                 {video.type === 'reel' && <span className="tag tag-reel" style={{ marginTop: 4, display: 'inline-block' }}>Reel</span>}
                             </div>
 
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr 1fr',
+                                gap: 8,
+                                marginBottom: 12,
+                                padding: 12,
+                                background: 'var(--off-white)',
+                                borderRadius: 4,
+                                fontSize: 11
+                            }}>
+                                <div>
+                                    <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Views</div>
+                                    <div style={{ fontWeight: 700, fontSize: 14 }}>{video.views || 0}</div>
+                                </div>
+                                <div>
+                                    <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Likes</div>
+                                    <div style={{ fontWeight: 700, fontSize: 14 }}>{video.likes || 0}</div>
+                                </div>
+                                <div>
+                                    <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Completions</div>
+                                    <div style={{ fontWeight: 700, fontSize: 14 }}>{video.completions || 0}</div>
+                                </div>
+                                <div>
+                                    <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Shares</div>
+                                    <div style={{ fontWeight: 700, fontSize: 14 }}>{video.shares || 0}</div>
+                                </div>
+                            </div>
+
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 {canManageVideos && (
                                     <>
@@ -613,8 +641,16 @@ function AnalyticsTab() {
         totalViews: 0,
         publishedVideos: 0,
         draftVideos: 0,
-        totalReels: 0
+        totalReels: 0,
+        totalWatchTime: 0,
+        totalCompletions: 0,
+        totalLikes: 0,
+        totalShares: 0,
+        avgViewsPerVideo: 0,
+        avgWatchTime: 0,
+        completionRate: 0
     });
+    const [topVideos, setTopVideos] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
 
     React.useEffect(() => {
@@ -623,7 +659,16 @@ function AnalyticsTab() {
                 const usersSnap = await getDocs(collection(db, 'users'));
                 const videosSnap = await getDocs(collection(db, 'videos'));
 
-                const videos = videosSnap.docs.map(doc => doc.data());
+                const videos = videosSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                const totalViews = videos.reduce((sum, v) => sum + (v.views || 0), 0);
+                const totalWatchTime = videos.reduce((sum, v) => sum + (v.watchTime || 0), 0);
+                const totalCompletions = videos.reduce((sum, v) => sum + (v.completions || 0), 0);
+                const totalLikes = videos.reduce((sum, v) => sum + (v.likes || 0), 0);
+                const totalShares = videos.reduce((sum, v) => sum + (v.shares || 0), 0);
+
+                const sorted = [...videos].sort((a, b) => (b.views || 0) - (a.views || 0));
+                setTopVideos(sorted.slice(0, 10));
 
                 setStats({
                     totalUsers: usersSnap.size,
@@ -631,7 +676,14 @@ function AnalyticsTab() {
                     publishedVideos: videos.filter(v => v.published).length,
                     draftVideos: videos.filter(v => !v.published).length,
                     totalReels: videos.filter(v => v.type === 'reel').length,
-                    totalViews: 0
+                    totalViews,
+                    totalWatchTime,
+                    totalCompletions,
+                    totalLikes,
+                    totalShares,
+                    avgViewsPerVideo: videos.length > 0 ? Math.round(totalViews / videos.length) : 0,
+                    avgWatchTime: totalViews > 0 ? Math.round(totalWatchTime / totalViews) : 0,
+                    completionRate: totalViews > 0 ? Math.round((totalCompletions / totalViews) * 100) : 0
                 });
             } catch (e) {
                 console.error(e);
@@ -641,6 +693,19 @@ function AnalyticsTab() {
         fetchStats();
     }, []);
 
+    const formatTime = (seconds) => {
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        if (hours > 0) return `${hours}h ${mins}m`;
+        return `${mins}m ${seconds % 60}s`;
+    };
+
+    const formatNumber = (num) => {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return num;
+    };
+
     if (loading) {
         return <div style={{ textAlign: 'center', padding: 40 }}><div className="loading" /></div>;
     }
@@ -649,63 +714,181 @@ function AnalyticsTab() {
         <div>
             <div style={{ marginBottom: 32 }}>
                 <h3 className="section-title" style={{ fontSize: 24, marginBottom: 8 }}>Platform Analytics</h3>
-                <p className="small">Overview of platform statistics</p>
+                <p className="small">Comprehensive overview of platform performance</p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 24, marginBottom: 40 }}>
-                <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-                    <div style={{ fontSize: 48, fontWeight: 800, color: 'var(--accent-gold)', marginBottom: 8 }}>{stats.totalUsers}</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Users</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginBottom: 40 }}>
+                <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+                    <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--accent-gold)', marginBottom: 8 }}>
+                        {formatNumber(stats.totalViews)}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Views</div>
                 </div>
 
-                <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-                    <div style={{ fontSize: 48, fontWeight: 800, color: 'var(--accent-sage)', marginBottom: 8 }}>{stats.totalVideos}</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Videos</div>
+                <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+                    <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--accent-sage)', marginBottom: 8 }}>
+                        {formatTime(stats.totalWatchTime)}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Watch Time</div>
                 </div>
 
-                <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-                    <div style={{ fontSize: 48, fontWeight: 800, color: '#48bb78', marginBottom: 8 }}>{stats.publishedVideos}</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Published</div>
+                <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+                    <div style={{ fontSize: 40, fontWeight: 800, color: '#48bb78', marginBottom: 8 }}>
+                        {stats.totalVideos}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Videos</div>
                 </div>
 
-                <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-                    <div style={{ fontSize: 48, fontWeight: 800, color: '#ecc94b', marginBottom: 8 }}>{stats.draftVideos}</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Drafts</div>
+                <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+                    <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--accent-navy)', marginBottom: 8 }}>
+                        {stats.totalUsers}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Users</div>
                 </div>
 
-                <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-                    <div style={{ fontSize: 48, fontWeight: 800, color: 'var(--accent-navy)', marginBottom: 8 }}>{stats.totalReels}</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reels</div>
+                <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+                    <div style={{ fontSize: 40, fontWeight: 800, color: '#e53e3e', marginBottom: 8 }}>
+                        {formatNumber(stats.totalLikes)}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Likes</div>
+                </div>
+
+                <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+                    <div style={{ fontSize: 40, fontWeight: 800, color: '#805ad5', marginBottom: 8 }}>
+                        {formatNumber(stats.totalShares)}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Shares</div>
+                </div>
+
+                <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+                    <div style={{ fontSize: 40, fontWeight: 800, color: '#d69e2e', marginBottom: 8 }}>
+                        {stats.completionRate}%
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Completion Rate</div>
+                </div>
+
+                <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+                    <div style={{ fontSize: 40, fontWeight: 800, color: '#319795', marginBottom: 8 }}>
+                        {formatNumber(stats.totalCompletions)}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Completions</div>
                 </div>
             </div>
 
-            <div className="card" style={{ padding: 32 }}>
-                <h4 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }}>Quick Stats</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid var(--border-light)' }}>
-                        <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Platform Activity</span>
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>Active</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid var(--border-light)' }}>
-                        <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Video to User Ratio</span>
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>
-                            {stats.totalUsers > 0 ? (stats.totalVideos / stats.totalUsers).toFixed(2) : '0'} videos/user
-                        </span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid var(--border-light)' }}>
-                        <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Published Rate</span>
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>
-                            {stats.totalVideos > 0 ? ((stats.publishedVideos / stats.totalVideos) * 100).toFixed(1) : '0'}%
-                        </span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 40 }}>
+                <div className="card" style={{ padding: 24 }}>
+                    <h4 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Content Distribution</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 14 }}>Published Videos</span>
+                            <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent-gold)' }}>{stats.publishedVideos}</span>
+                        </div>
+                        <div style={{ height: 8, background: 'var(--warm-gray)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{
+                                height: '100%',
+                                width: `${stats.totalVideos > 0 ? (stats.publishedVideos / stats.totalVideos) * 100 : 0}%`,
+                                background: 'var(--accent-gold)',
+                                transition: 'width 0.3s'
+                            }} />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                            <span style={{ fontSize: 14 }}>Draft Videos</span>
+                            <span style={{ fontSize: 18, fontWeight: 700, color: '#ecc94b' }}>{stats.draftVideos}</span>
+                        </div>
+                        <div style={{ height: 8, background: 'var(--warm-gray)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{
+                                height: '100%',
+                                width: `${stats.totalVideos > 0 ? (stats.draftVideos / stats.totalVideos) * 100 : 0}%`,
+                                background: '#ecc94b',
+                                transition: 'width 0.3s'
+                            }} />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                            <span style={{ fontSize: 14 }}>Reels</span>
+                            <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent-navy)' }}>{stats.totalReels}</span>
+                        </div>
+                        <div style={{ height: 8, background: 'var(--warm-gray)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{
+                                height: '100%',
+                                width: `${stats.totalVideos > 0 ? (stats.totalReels / stats.totalVideos) * 100 : 0}%`,
+                                background: 'var(--accent-navy)',
+                                transition: 'width 0.3s'
+                            }} />
+                        </div>
                     </div>
                 </div>
+
+                <div className="card" style={{ padding: 24 }}>
+                    <h4 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Performance Metrics</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        <div style={{ padding: 12, background: 'var(--off-white)', borderRadius: 4 }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Avg Views per Video</div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--charcoal)' }}>{stats.avgViewsPerVideo}</div>
+                        </div>
+                        <div style={{ padding: 12, background: 'var(--off-white)', borderRadius: 4 }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Avg Watch Time per View</div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--charcoal)' }}>{formatTime(stats.avgWatchTime)}</div>
+                        </div>
+                        <div style={{ padding: 12, background: 'var(--off-white)', borderRadius: 4 }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Engagement Rate</div>
+                            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--charcoal)' }}>
+                                {stats.totalViews > 0 ? Math.round(((stats.totalLikes + stats.totalShares) / stats.totalViews) * 100) : 0}%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="card" style={{ padding: 24 }}>
+                <h4 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Top Performing Videos</h4>
+                {topVideos.length > 0 ? (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left' }}>
+                                <th style={{ padding: 12, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Title</th>
+                                <th style={{ padding: 12, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Type</th>
+                                <th style={{ padding: 12, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Views</th>
+                                <th style={{ padding: 12, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Likes</th>
+                                <th style={{ padding: 12, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Completion</th>
+                                <th style={{ padding: 12, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Shares</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {topVideos.map((video, index) => (
+                                <tr key={video.id} style={{ borderBottom: '1px solid var(--border-light)' }}>
+                                    <td style={{ padding: 12, fontSize: 14, maxWidth: 300 }}>
+                                        <div style={{ fontWeight: 600, marginBottom: 2 }}>{video.title}</div>
+                                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>by {video.channelName}</div>
+                                    </td>
+                                    <td style={{ padding: 12 }}>
+                                        <span className={`tag ${video.type === 'reel' ? 'tag-reel' : ''}`}>
+                                            {video.type === 'reel' ? 'Reel' : 'Video'}
+                                        </span>
+                                    </td>
+                                    <td style={{ padding: 12, fontSize: 14, fontWeight: 600 }}>{formatNumber(video.views || 0)}</td>
+                                    <td style={{ padding: 12, fontSize: 14, fontWeight: 600 }}>{formatNumber(video.likes || 0)}</td>
+                                    <td style={{ padding: 12, fontSize: 14, fontWeight: 600 }}>
+                                        {video.views > 0 ? Math.round(((video.completions || 0) / video.views) * 100) : 0}%
+                                    </td>
+                                    <td style={{ padding: 12, fontSize: 14, fontWeight: 600 }}>{formatNumber(video.shares || 0)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ) : (
+                    <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+                        No videos yet
+                    </div>
+                )}
             </div>
         </div>
     );
 }
 
 export default function Admin({ user }) {
-    const [activeTab, setActiveTab] = React.useState('users');
+    const [activeTab, setActiveTab] = React.useState('analytics');
     const [currentUserData, setCurrentUserData] = React.useState(null);
     const [loading, setLoading] = React.useState(true);
 
@@ -755,9 +938,9 @@ export default function Admin({ user }) {
     }
 
     const tabs = [
+        { id: 'analytics', label: 'Analytics', icon: '📊', allowedRoles: ['super_admin', 'admin', 'moderator'] },
         { id: 'users', label: 'Users', icon: '👥', allowedRoles: ['super_admin', 'admin', 'moderator'] },
         { id: 'videos', label: 'Videos', icon: '🎬', allowedRoles: ['super_admin', 'admin', 'moderator'] },
-        { id: 'analytics', label: 'Analytics', icon: '📊', allowedRoles: ['super_admin', 'admin'] },
         { id: 'settings', label: 'Settings', icon: '⚙️', allowedRoles: ['super_admin', 'admin'] }
     ];
 
@@ -822,9 +1005,9 @@ export default function Admin({ user }) {
             </div>
 
             <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 32px 64px' }}>
+                {activeTab === 'analytics' && <AnalyticsTab />}
                 {activeTab === 'users' && <UserManagementTab currentUser={currentUserData} />}
                 {activeTab === 'videos' && <VideoManagementTab currentUser={currentUserData} />}
-                {activeTab === 'analytics' && <AnalyticsTab />}
                 {activeTab === 'settings' && <SystemSettingsTab currentUser={currentUserData} />}
             </div>
         </div>
