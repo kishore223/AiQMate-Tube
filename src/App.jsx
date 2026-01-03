@@ -153,7 +153,10 @@ function Header({ page, onAdd, user }) {
 function Recorder({ onRecorded, onCancel }) {
   const [recording, setRecording] = React.useState(false);
   const [stream, setStream] = React.useState(null);
-  const videoRef = React.useRef(null);
+  const [recordedBlob, setRecordedBlob] = React.useState(null);
+  const [previewUrl, setPreviewUrl] = React.useState(null);
+  const liveVideoRef = React.useRef(null);
+  const previewVideoRef = React.useRef(null);
   const recorderRef = React.useRef(null);
   const chunksRef = React.useRef([]);
 
@@ -162,9 +165,9 @@ function Recorder({ onRecorded, onCancel }) {
       try {
         const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         setStream(s);
-        if (videoRef.current) {
-          videoRef.current.srcObject = s;
-          videoRef.current.play();
+        if (liveVideoRef.current) {
+          liveVideoRef.current.srcObject = s;
+          liveVideoRef.current.play();
         }
       } catch (err) {
         alert('Camera access denied.');
@@ -174,6 +177,7 @@ function Recorder({ onRecorded, onCancel }) {
     init();
     return () => {
       if (stream) stream.getTracks().forEach(t => t.stop());
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, []);
 
@@ -186,7 +190,9 @@ function Recorder({ onRecorded, onCancel }) {
     };
     recorder.onstop = () => {
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-      onRecorded(blob);
+      setRecordedBlob(blob);
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
       if (stream) stream.getTracks().forEach(t => t.stop());
     };
     recorder.start();
@@ -201,18 +207,60 @@ function Recorder({ onRecorded, onCancel }) {
     }
   }
 
+  function handleUseRecording() {
+    if (recordedBlob) {
+      onRecorded(recordedBlob);
+    }
+  }
+
+  function handleRetry() {
+    setRecordedBlob(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    async function reinit() {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        setStream(s);
+        if (liveVideoRef.current) {
+          liveVideoRef.current.srcObject = s;
+          liveVideoRef.current.play();
+        }
+      } catch (err) {
+        alert('Camera access denied.');
+        onCancel();
+      }
+    }
+    reinit();
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div className="recorder-preview">
-        <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} autoPlay muted />
+        {!recordedBlob ? (
+          <video ref={liveVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} autoPlay muted />
+        ) : (
+          <video ref={previewVideoRef} src={previewUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls />
+        )}
       </div>
       <div className="recorder-controls">
-        {!recording ? (
-          <button className="btn btn-primary" onClick={startRecording}>Start Recording</button>
+        {!recordedBlob ? (
+          <>
+            {!recording ? (
+              <button className="btn btn-primary" onClick={startRecording}>Start Recording</button>
+            ) : (
+              <button className="btn btn-danger" onClick={stopRecording}>Stop Recording</button>
+            )}
+            <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+          </>
         ) : (
-          <button className="btn btn-danger" onClick={stopRecording}>Stop Recording</button>
+          <>
+            <button className="btn btn-primary" onClick={handleUseRecording} style={{ flex: 1 }}>Use This Recording</button>
+            <button className="btn btn-secondary" onClick={handleRetry}>Record Again</button>
+            <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+          </>
         )}
-        <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
@@ -226,6 +274,9 @@ function AddVideoModal({ onClose, onUpload }) {
   const [videoType, setVideoType] = React.useState('standard');
   const [preview, setPreview] = React.useState(null);
   const [uploading, setUploading] = React.useState(false);
+  const [loadingUrl, setLoadingUrl] = React.useState(false);
+  const [isYoutube, setIsYoutube] = React.useState(false);
+  const [youtubeId, setYoutubeId] = React.useState(null);
 
   function handleFileChange(e) {
     const f = e.target.files[0];
@@ -239,19 +290,140 @@ function AddVideoModal({ onClose, onUpload }) {
     setFile(blob);
     setPreview(URL.createObjectURL(blob));
     setMode('file');
+    setIsYoutube(false);
+  }
+
+  function extractVideoId(url) {
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\?\/]+)/,
+      /youtube\.com\/shorts\/([^&\?\/]+)/
+    ];
+
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) return match[1];
+    }
+    return null;
+  }
+
+  async function downloadYoutubeVideo(videoUrl) {
+    try {
+      // 1. Get the download URL from Cobalt
+      const response = await fetch('https://api.cobalt.tools/api/json', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url: videoUrl,
+          vCodec: 'h264',
+          vQuality: '720'
+        })
+      });
+
+      const data = await response.json();
+
+      if (!data || !data.url) {
+        console.error('Cobalt API Error:', data);
+        throw new Error('Could not get download link from service');
+      }
+
+      // 2. Fetch the video Blob
+      // Direct fetch usually fails due to CORS. We use a proxy.
+      const fileUrl = data.url;
+      let videoResponse;
+
+      try {
+        // Try direct first (unlikely to work for YouTube, but good practice)
+        videoResponse = await fetch(fileUrl);
+        if (!videoResponse.ok) throw new Error('Direct fetch failed');
+      } catch (err) {
+        // Fallback to CORS proxy
+        // Using corsproxy.io as a public proxy
+        // Syntax: https://corsproxy.io/?<url>
+        console.log('Direct fetch failed, trying CORS proxy...');
+        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(fileUrl);
+        videoResponse = await fetch(proxyUrl);
+      }
+
+      if (!videoResponse || !videoResponse.ok) {
+        throw new Error('Failed to download video file via proxy');
+      }
+
+      const blob = await videoResponse.blob();
+      return blob;
+    } catch (error) {
+      console.error('YouTube download failed:', error);
+      // Provide more specific error messages to the user
+      if (error.message.includes('Could not get download link')) {
+        throw new Error('Video service could not process this URL. It might be restricted or private.');
+      }
+      throw new Error('Failed to download video data (CORS/Network error). Try a different video or try again later.');
+    }
+  }
+
+  async function handleLoadUrl() {
+    if (!url.trim()) return alert('Please enter a URL');
+
+    setLoadingUrl(true);
+    try {
+      const videoId = extractVideoId(url);
+
+      if (videoId) {
+        // Updated logic: Download YouTube video instead of embedding
+        const blob = await downloadYoutubeVideo(url);
+        setFile(blob);
+        setPreview(URL.createObjectURL(blob));
+        setIsYoutube(false); // Treat as a normal file now
+        setMode('file'); // Switch to file mode to show preview
+        if (!title) setTitle(`YouTube Video ${videoId}`); // Set a default title if empty
+        setLoadingUrl(false);
+        return;
+      }
+
+      setIsYoutube(false);
+      const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv'];
+      const hasVideoExtension = videoExtensions.some(ext => url.toLowerCase().includes(ext));
+
+      if (!hasVideoExtension) {
+        alert('Please provide a direct video file URL (e.g., ending in .mp4, .webm, etc.) or a valid YouTube link.');
+        setLoadingUrl(false);
+        return;
+      }
+
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) throw new Error('Failed to fetch video from URL');
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.startsWith('video/')) {
+        throw new Error('URL does not point to a valid video file');
+      }
+
+      const blob = await response.blob();
+      setFile(blob);
+      setPreview(url);
+      setLoadingUrl(false);
+    } catch (error) {
+      let errorMessage = 'Failed to load video from URL: ' + error.message;
+
+      if (error.message.includes('CORS') || error.message.includes('NetworkError')) {
+        errorMessage = 'Cannot load video from this URL due to security restrictions.\n\nPlease:\n1. Download the video to your device\n2. Use "Upload File" option instead';
+      }
+
+      alert(errorMessage);
+      setLoadingUrl(false);
+    }
   }
 
   async function handleSubmit() {
     if (!title.trim()) return alert('Please enter a title');
+    if (!file) return alert('Please select or record a video');
 
     setUploading(true);
     try {
-      if (mode === 'file' && file) {
-        await onUpload(file, videoType, title);
-      } else if (mode === 'url' && url) {
-        const blob = await fetch(url).then(r => r.blob());
-        await onUpload(blob, videoType, title);
-      }
+      // Pass 'standard' or user selected type, treat as local file upload
+      await onUpload(file, videoType, title);
       onClose();
     } catch (e) {
       alert('Upload failed: ' + e.message);
@@ -291,20 +463,58 @@ function AddVideoModal({ onClose, onUpload }) {
             </div>
           )}
 
-          {mode === 'record' && <Recorder onRecorded={handleRecorded} onCancel={() => setMode(null)} />}
+          {mode === 'record' && !file && <Recorder onRecorded={handleRecorded} onCancel={() => setMode(null)} />}
 
-          {mode === 'url' && !preview && (
-            <div className="input-group">
-              <label>Video URL</label>
-              <input type="text" placeholder="https://example.com/video.mp4" value={url} onChange={e => setUrl(e.target.value)} />
-              <button className="btn btn-primary" onClick={() => setPreview(url)} style={{ marginTop: 12 }}>Load Preview</button>
+          {mode === 'url' && !file && (
+            <div>
+              <div className="input-group">
+                <label>Video URL</label>
+                <input
+                  type="text"
+                  placeholder="https://example.com/video.mp4"
+                  value={url}
+                  onChange={e => setUrl(e.target.value)}
+                />
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                  Supported: YouTube links or direct video files (.mp4, .webm)
+                </div>
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={handleLoadUrl}
+                disabled={loadingUrl}
+                style={{ marginTop: 12, width: '100%' }}
+              >
+                {loadingUrl ? <div className="loading-sm" /> : 'Load Video'}
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setMode(null)}
+                style={{ marginTop: 12, width: '100%' }}
+              >
+                Back
+              </button>
             </div>
           )}
 
-          {preview && (
+          {preview && file && (
             <>
               <div style={{ marginBottom: 24 }}>
-                <video src={preview} controls style={{ width: '100%', maxHeight: 400, background: 'var(--charcoal)' }} />
+                {isYoutube ? (
+                  <iframe
+                    src={preview}
+                    style={{ width: '100%', height: 400, border: 'none', background: 'var(--charcoal)' }}
+                    title="Preview"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video
+                    src={preview}
+                    controls
+                    style={{ width: '100%', maxHeight: 400, background: 'var(--charcoal)' }}
+                  />
+                )}
               </div>
 
               <div className="input-group">
@@ -355,7 +565,6 @@ function VideoPlayer({ meta, onClose, subscriptions, onToggleSubscribe, userId }
     const unsub = onSnapshot(likeRef, (snap) => {
       setLiked(snap.exists());
     });
-    // Listen to video changes for realtime views/likes updates
     const videoRefDoc = doc(db, 'videos', meta.id);
     const unsubVideo = onSnapshot(videoRefDoc, (snap) => {
       if (snap.exists()) {
@@ -391,7 +600,9 @@ function VideoPlayer({ meta, onClose, subscriptions, onToggleSubscribe, userId }
   React.useEffect(() => {
     const timer = setTimeout(() => {
       try {
-        videoRef.current?.play();
+        if (!meta.provider || meta.provider !== 'youtube') {
+          videoRef.current?.play();
+        }
         trackView();
       } catch { }
     }, 100);
@@ -411,7 +622,7 @@ function VideoPlayer({ meta, onClose, subscriptions, onToggleSubscribe, userId }
 
   async function onTime() {
     const v = videoRef.current;
-    if (!v || tracked || !userId) return;
+    if (!v || tracked || !userId || (meta.provider === 'youtube')) return;
     const progress = v.duration ? (v.currentTime / v.duration) : 0;
     if (v.currentTime >= 5 || progress >= 0.5) {
       try {
@@ -461,7 +672,19 @@ function VideoPlayer({ meta, onClose, subscriptions, onToggleSubscribe, userId }
             <button className="btn btn-danger" onClick={onClose}><Icons.Close /></button>
           </div>
         </div>
-        {meta.url ? <video ref={videoRef} src={meta.url} className="player-video" controls playsInline onTimeUpdate={onTime} /> : <div className="empty">Error</div>}
+        {meta.provider === 'youtube' ? (
+          <iframe
+            src={meta.url}
+            className="player-video"
+            title={meta.title}
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            style={{ width: '100%', aspectRatio: '16/9' }}
+          />
+        ) : (
+          meta.url ? <video ref={videoRef} src={meta.url} className="player-video" controls playsInline onTimeUpdate={onTime} /> : <div className="empty">Error</div>
+        )}
       </div>
     </div>
   );
@@ -542,20 +765,41 @@ export default function App() {
     if (userBanned) return alert("Your account has been banned. You cannot upload videos.");
 
     const safeTitle = title.replace(/[^a-z0-9]/gi, '_');
-    let extension = 'mp4';
-    if (fileOrBlob.name) {
-      const parts = fileOrBlob.name.split('.');
-      if (parts.length > 1) extension = parts.pop();
+
+    let downloadURL = '';
+    let storagePath = '';
+    let provider = 'local';
+
+    if (fileOrBlob.type === 'youtube') {
+      downloadURL = `https://www.youtube.com/embed/${fileOrBlob.videoId}`;
+      storagePath = '';
+      provider = 'youtube';
+    } else {
+      let extension = 'mp4';
+      if (fileOrBlob.name) {
+        const parts = fileOrBlob.name.split('.');
+        if (parts.length > 1) extension = parts.pop();
+      } else if (fileOrBlob.type) {
+        const mimeMap = {
+          'video/mp4': 'mp4',
+          'video/webm': 'webm',
+          'video/quicktime': 'mov',
+          'video/x-msvideo': 'avi'
+        };
+        extension = mimeMap[fileOrBlob.type] || 'mp4';
+      }
+
+      const fileName = `videos/${Date.now()}_${safeTitle}.${extension}`;
+      storagePath = fileName;
+      const storageRef = ref(storage, fileName);
+
+      let mimeType = fileOrBlob.type;
+      if (!mimeType || !mimeType.startsWith('video/')) mimeType = 'video/mp4';
+      const metadata = { contentType: mimeType };
+
+      const snapshot = await uploadBytes(storageRef, fileOrBlob, metadata);
+      downloadURL = await getDownloadURL(snapshot.ref);
     }
-    const fileName = `videos/${Date.now()}_${safeTitle}.${extension}`;
-    const storageRef = ref(storage, fileName);
-
-    let mimeType = fileOrBlob.type;
-    if (!mimeType || !mimeType.startsWith('video/')) mimeType = 'video/mp4';
-    const metadata = { contentType: mimeType };
-
-    const snapshot = await uploadBytes(storageRef, fileOrBlob, metadata);
-    const downloadURL = await getDownloadURL(snapshot.ref);
 
     await addDoc(collection(db, 'videos'), {
       title: title || 'Untitled',
@@ -564,7 +808,8 @@ export default function App() {
       creatorId: user.uid,
       createdAt: new Date().toISOString(),
       url: downloadURL,
-      storagePath: fileName,
+      storagePath: storagePath,
+      provider: provider,
       published: false,
       collaborators: [],
       views: 0,
@@ -593,7 +838,7 @@ export default function App() {
     signOut(auth);
   }
 
-  const homeVideos = videos.filter(v => v.published === true);
+  const homeVideos = videos.filter(v => v.published === true && v.type !== 'reel');
   const reelsVideos = videos.filter(v => v.published === true);
 
   if (authLoading) return <div style={{ height: '100vh', display: 'grid', placeItems: 'center' }}><div className="loading"></div></div>;

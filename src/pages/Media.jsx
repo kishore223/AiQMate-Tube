@@ -6,7 +6,7 @@ import { doc, updateDoc, deleteDoc, arrayUnion, arrayRemove } from 'firebase/fir
 
 function TabButton({ active, onClick, label }) {
   return (
-    <button 
+    <button
       onClick={onClick}
       style={{
         padding: '12px 24px',
@@ -45,7 +45,7 @@ function EditModal({ video, onClose }) {
     setLoading(true);
     const newStatus = !video.published;
     try {
-      await updateDoc(doc(db, 'videos', video.id), { 
+      await updateDoc(doc(db, 'videos', video.id), {
         published: newStatus,
         publishedAt: newStatus ? new Date().toISOString() : video.publishedAt
       });
@@ -98,18 +98,18 @@ function EditModal({ video, onClose }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="input-group">
                 <label>Video Title</label>
-                <input 
-                  type="text" 
-                  value={title} 
-                  onChange={e => setTitle(e.target.value)} 
+                <input
+                  type="text"
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
                   style={{ fontSize: 16, fontWeight: 500 }}
                 />
               </div>
               <div className="input-group">
                 <label>File Information</label>
                 <div style={{ padding: 12, background: '#faf8f5', border: '1px solid #e8e5df', fontSize: 13, color: '#615e5a' }}>
-                  <strong>ID:</strong> {video.id}<br/>
-                  <strong>Type:</strong> {video.type}<br/>
+                  <strong>ID:</strong> {video.id}<br />
+                  <strong>Type:</strong> {video.type}<br />
                   <strong>Created:</strong> {new Date(video.createdAt).toLocaleString()}
                 </div>
               </div>
@@ -122,11 +122,11 @@ function EditModal({ video, onClose }) {
           {/* --- TAB 2: PUBLISH --- */}
           {activeTab === 'publish' && (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ 
-                fontSize: 14, 
-                marginBottom: 16, 
-                padding: '8px 16px', 
-                background: video.published ? '#e6fffa' : '#fffaf0', 
+              <div style={{
+                fontSize: 14,
+                marginBottom: 16,
+                padding: '8px 16px',
+                background: video.published ? '#e6fffa' : '#fffaf0',
                 color: video.published ? '#2c7a7b' : '#c05621',
                 display: 'inline-block',
                 borderRadius: 20,
@@ -134,15 +134,15 @@ function EditModal({ video, onClose }) {
               }}>
                 Current Status: {video.published ? 'LIVE (Public)' : 'DRAFT (Private)'}
               </div>
-              
+
               <p style={{ color: '#615e5a', marginBottom: 24, fontSize: 14 }}>
-                {video.published 
+                {video.published
                   ? "This video is visible on the Home and Reels pages. Unpublishing will hide it from everyone except you and your collaborators."
                   : "This video is currently hidden. Publishing it will make it visible to all users on the platform."
                 }
               </p>
 
-              <button 
+              <button
                 className={`btn ${video.published ? 'btn-danger' : 'btn-primary'}`}
                 onClick={handleTogglePublish}
                 disabled={loading}
@@ -161,8 +161,8 @@ function EditModal({ video, onClose }) {
               </p>
 
               <form onSubmit={handleAddCollaborator} style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   placeholder="colleague@example.com"
                   value={collabEmail}
                   onChange={e => setCollabEmail(e.target.value)}
@@ -180,12 +180,12 @@ function EditModal({ video, onClose }) {
                   <div className="small" style={{ fontStyle: 'italic' }}>No collaborators yet.</div>
                 )}
                 {video.collaborators?.map(email => (
-                  <div key={email} style={{ 
+                  <div key={email} style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '8px 12px', background: '#faf8f5', border: '1px solid #e8e5df', borderRadius: 4
                   }}>
                     <span style={{ fontSize: 14 }}>{email}</span>
-                    <button 
+                    <button
                       onClick={() => handleRemoveCollaborator(email)}
                       style={{ background: 'none', border: 'none', color: '#c53030', cursor: 'pointer', fontSize: 18 }}
                     >
@@ -210,18 +210,18 @@ function MediaItem({ video, onPlay, onEdit, onDelete }) {
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-      <div 
-        className="video-thumb" 
+      <div
+        className="video-thumb"
         onClick={() => onPlay(video)}
         style={{ cursor: 'pointer' }}
       >
         <video src={video.url} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         <div className="video-thumb-overlay">
           <div className="play-icon" style={{ width: 48, height: 48 }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
           </div>
         </div>
-        
+
         {/* Status Badge */}
         <div style={{ position: 'absolute', top: 12, right: 12, padding: '4px 8px', borderRadius: 4, background: isPublished ? '#48bb78' : '#ecc94b', color: isPublished ? '#fff' : '#000', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
           {isPublished ? 'Public' : 'Private'}
@@ -245,20 +245,20 @@ function MediaItem({ video, onPlay, onEdit, onDelete }) {
         </div>
 
         <div style={{ marginTop: 'auto', display: 'flex', gap: 10 }}>
-          <button 
-            className="btn btn-secondary" 
+          <button
+            className="btn btn-secondary"
             onClick={() => onEdit(video)}
             style={{ flex: 1 }}
           >
             Edit / Manage
           </button>
-          
-          <button 
-            className="btn btn-danger" 
+
+          <button
+            className="btn btn-danger"
             onClick={() => onDelete(video)}
             style={{ padding: '0 12px' }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
           </button>
         </div>
       </div>
@@ -269,14 +269,29 @@ function MediaItem({ video, onPlay, onEdit, onDelete }) {
 export default function Media({ videos, user, onPlay }) {
   const [editingVideo, setEditingVideo] = React.useState(null);
 
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [filterType, setFilterType] = React.useState('all'); // 'all', 'public', 'private', 'collab'
+
   // FILTER: Show video if I am the Creator OR if my Email is in 'collaborators'
-  const myVideos = videos.filter(v => 
-    v.creatorId === user.uid || 
+  // Then apply search and type filters
+  const myVideos = videos.filter(v =>
+    v.creatorId === user.uid ||
     (v.collaborators && v.collaborators.includes(user.email))
   ).map(v => ({
     ...v,
-    isOwner: v.creatorId === user.uid // Mark ownership for UI badges
-  }));
+    isOwner: v.creatorId === user.uid
+  })).filter(v => {
+    // 1. Search Filter
+    const matchesSearch = v.title.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // 2. Type/Status Filter
+    let matchesType = true;
+    if (filterType === 'public') matchesType = v.published === true;
+    if (filterType === 'private') matchesType = !v.published;
+    if (filterType === 'collab') matchesType = !v.isOwner;
+
+    return matchesSearch && matchesType;
+  });
 
   async function handleDelete(video) {
     if (!video.isOwner) {
@@ -290,43 +305,91 @@ export default function Media({ videos, user, onPlay }) {
     }
   }
 
-  if (myVideos.length === 0) {
-    return (
-      <div className="empty">
-        <div className="empty-icon">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        </div>
-        <div className="empty-title">Media Library is Empty</div>
-        <div className="empty-text">
-          Upload videos or ask a team member to add you as a collaborator.
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h2 className="section-title">My Media</h2>
-        <p className="section-subtitle">Manage your uploads and collaborations.</p>
+      {/* Search and Filter Controls */}
+      <div style={{ marginBottom: 24, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Search your videos..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          style={{
+            flex: 1,
+            minWidth: 200,
+            padding: '10px 16px',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--card-bg)',
+            color: 'var(--text-primary)',
+            fontSize: 14
+          }}
+        />
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[
+            { id: 'all', label: 'All' },
+            { id: 'public', label: 'Public' },
+            { id: 'private', label: 'Private' },
+            { id: 'collab', label: 'Collabs' }
+          ].map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => setFilterType(opt.id)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 20,
+                border: '1px solid',
+                borderColor: filterType === opt.id ? 'var(--primary)' : 'var(--border)',
+                background: filterType === opt.id ? 'var(--primary-light)' : 'transparent',
+                color: filterType === opt.id ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 600,
+                transition: 'all 0.2s'
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid">
-        {myVideos.map(video => (
-          <MediaItem 
-            key={video.id} 
-            video={video} 
-            onPlay={onPlay} 
-            onEdit={setEditingVideo}
-            onDelete={handleDelete}
-          />
-        ))}
-      </div>
+      {myVideos.length === 0 ? (
+        <div className="empty" style={{ marginTop: 40 }}>
+          {/* Only show "Empty Library" if real videos are 0, otherwise it's just no search results */}
+          {videos.length === 0 ? (
+            <>
+              <div className="empty-icon">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+              </div>
+              <div className="empty-title">Media Library is Empty</div>
+              <div className="empty-text">
+                Upload videos or ask a team member to add you as a collaborator.
+              </div>
+            </>
+          ) : (
+            <div className="empty-text">No videos match your search filters.</div>
+          )}
+        </div>
+      ) : (
+        <div className="grid">
+          {myVideos.map(video => (
+            <MediaItem
+              key={video.id}
+              video={video}
+              onPlay={onPlay}
+              onEdit={setEditingVideo}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
 
       {editingVideo && (
-        <EditModal 
-          video={editingVideo} 
-          onClose={() => setEditingVideo(null)} 
+        <EditModal
+          video={editingVideo}
+          onClose={() => setEditingVideo(null)}
         />
       )}
     </div>
