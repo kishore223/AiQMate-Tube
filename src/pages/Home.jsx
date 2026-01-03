@@ -2,14 +2,35 @@ import React from 'react';
 
 function VideoCard({ meta, onPlay, onToggleSubscribe, isSubbed }) {
   const videoRef = React.useRef(null);
+  const [thumbnailLoaded, setThumbnailLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleLoadedData = () => {
+      setThumbnailLoaded(true);
+    };
+
+    video.addEventListener('loadeddata', handleLoadedData);
+    video.load();
+
+    return () => {
+      video.removeEventListener('loadeddata', handleLoadedData);
+    };
+  }, [meta.url]);
 
   return (
     <div className="card">
-      <div 
-        className="video-thumb" 
-        onMouseEnter={() => videoRef.current?.play().catch(()=>{})}
+      <div
+        className="video-thumb"
+        onMouseEnter={() => {
+          if (videoRef.current && thumbnailLoaded) {
+            videoRef.current.play().catch(() => { });
+          }
+        }}
         onMouseLeave={() => {
-          if(videoRef.current) {
+          if (videoRef.current) {
             videoRef.current.pause();
             videoRef.current.currentTime = 0;
           }
@@ -22,10 +43,25 @@ function VideoCard({ meta, onPlay, onToggleSubscribe, isSubbed }) {
           playsInline
           preload="metadata"
           loop
+          style={{
+            opacity: thumbnailLoaded ? 1 : 0,
+            transition: 'opacity 0.3s'
+          }}
         />
+        {!thumbnailLoaded && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'grid',
+            placeItems: 'center',
+            background: 'var(--warm-gray)'
+          }}>
+            <div className="loading-sm" />
+          </div>
+        )}
         <div className="video-thumb-overlay" onClick={() => onPlay(meta)}>
           <div className="play-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="#000"><path d="M8 5v14l11-7z"/></svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="#000"><path d="M8 5v14l11-7z" /></svg>
           </div>
         </div>
       </div>
@@ -54,23 +90,21 @@ function VideoCard({ meta, onPlay, onToggleSubscribe, isSubbed }) {
 }
 
 export default function Home({ videos, onPlay, onToggleSubscribe, subscriptions, isLoading }) {
-  
-  // 1. Show Loading State
+
   if (isLoading) {
     return (
       <div className="empty">
         <div className="loading" />
-        <div className="empty-text" style={{marginTop: '20px'}}>Connecting to Cloud...</div>
+        <div className="empty-text" style={{ marginTop: '20px' }}>Connecting to Cloud...</div>
       </div>
     );
   }
 
-  // 2. Show Empty State (only if NOT loading and NO videos)
   if (videos.length === 0) {
     return (
       <div className="empty">
         <div className="empty-icon">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="7" width="20" height="15" rx="2" ry="2" /><polyline points="17 2 12 7 7 2" /></svg>
         </div>
         <div className="empty-title">No videos yet</div>
         <div className="empty-text">Click "Add Video" to upload your first video to Firebase.</div>
@@ -78,7 +112,6 @@ export default function Home({ videos, onPlay, onToggleSubscribe, subscriptions,
     );
   }
 
-  // 3. Show Videos
   return (
     <div className="grid">
       {videos.map(v => (
