@@ -1,10 +1,9 @@
 import React from 'react';
 
-
-function HeroCarousel({ videos, onPlay, onToggleSubscribe, subscriptions }) {
+function HeroCarousel({ videos, onPlay, onToggleSubscribe, subscribedChannels }) {
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const video = videos[currentIndex];
-  const isSubbed = subscriptions.includes(video?.channelName);
+  const isSubbed = video?.channelId && subscribedChannels.includes(video.channelId);
   const videoRef = React.useRef(null);
 
   const handleNext = () => {
@@ -32,7 +31,7 @@ function HeroCarousel({ videos, onPlay, onToggleSubscribe, subscriptions }) {
           muted
           loop
           playsInline
-          key={video.url} // Force reload on video change
+          key={video.url}
         />
 
         <div className="hero-video-overlay">
@@ -57,8 +56,8 @@ function HeroCarousel({ videos, onPlay, onToggleSubscribe, subscriptions }) {
                 </svg>
                 Watch Now
               </button>
-              {video.channelName && video.channelName !== 'You' && (
-                <button className="btn btn-hero-secondary" onClick={() => onToggleSubscribe(video.channelName)}>
+              {video.channelId && (
+                <button className="btn btn-hero-secondary" onClick={() => onToggleSubscribe(video.channelId)}>
                   {isSubbed ? 'Subscribed' : 'Subscribe'}
                 </button>
               )}
@@ -130,6 +129,12 @@ function VideoCard({ meta, onPlay, onToggleSubscribe, isSubbed }) {
             alt={meta.title}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
+        ) : meta.thumbnail ? (
+          <img
+            src={meta.thumbnail}
+            alt={meta.title}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         ) : (
           <video
             ref={videoRef}
@@ -145,7 +150,7 @@ function VideoCard({ meta, onPlay, onToggleSubscribe, isSubbed }) {
           />
         )}
 
-        {!thumbnailLoaded && meta.provider !== 'youtube' && (
+        {!thumbnailLoaded && meta.provider !== 'youtube' && !meta.thumbnail && (
           <div style={{
             position: 'absolute',
             inset: 0,
@@ -179,8 +184,8 @@ function VideoCard({ meta, onPlay, onToggleSubscribe, isSubbed }) {
         </div>
         <div className="video-actions">
           <button className="btn btn-secondary" onClick={() => onPlay(meta)} style={{ flex: 1 }}>Play</button>
-          {meta.channelName && meta.channelName !== 'You' && (
-            <button className="btn btn-ghost" onClick={() => onToggleSubscribe(meta.channelName)}>
+          {meta.channelId && (
+            <button className="btn btn-ghost" onClick={() => onToggleSubscribe(meta.channelId)}>
               {isSubbed ? 'Unsub' : 'Subscribe'}
             </button>
           )}
@@ -190,9 +195,9 @@ function VideoCard({ meta, onPlay, onToggleSubscribe, isSubbed }) {
   );
 }
 
-export default function Home({ videos, onPlay, onToggleSubscribe, subscriptions, isLoading }) {
-  const recentVideos = videos.slice(0, 5); // Take top 5 for carousel
-  const allVideos = videos; // Show all below
+export default function Home({ videos, onPlay, onToggleSubscribe, subscribedChannels, isLoading }) {
+  const recentVideos = videos.slice(0, 5);
+  const allVideos = videos;
 
   if (isLoading) {
     return (
@@ -222,7 +227,7 @@ export default function Home({ videos, onPlay, onToggleSubscribe, subscriptions,
           videos={recentVideos}
           onPlay={onPlay}
           onToggleSubscribe={onToggleSubscribe}
-          subscriptions={subscriptions}
+          subscribedChannels={subscribedChannels}
         />
       )}
 
@@ -238,7 +243,7 @@ export default function Home({ videos, onPlay, onToggleSubscribe, subscriptions,
               meta={v}
               onPlay={onPlay}
               onToggleSubscribe={onToggleSubscribe}
-              isSubbed={subscriptions.includes(v.channelName)}
+              isSubbed={v.channelId && subscribedChannels.includes(v.channelId)}
             />
           ))}
         </div>

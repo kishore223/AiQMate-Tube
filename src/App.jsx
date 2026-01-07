@@ -2,7 +2,7 @@ import React from 'react';
 import Home from './pages/Home';
 import Reels from './pages/Reels';
 import History from './pages/History';
-import Subscriptions from './pages/Subscriptions';
+import Channels from './pages/Channels';
 import Profile from './pages/Profile';
 import Media from './pages/Media';
 import Auth from './pages/Auth';
@@ -34,7 +34,7 @@ const Icons = {
   Home: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>,
   Reels: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" /><line x1="7" y1="2" x2="7" y2="22" /><line x1="17" y1="2" x2="17" y2="22" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="2" y1="7" x2="7" y2="7" /><line x1="2" y1="17" x2="7" y2="17" /><line x1="17" y1="17" x2="22" y2="17" /><line x1="17" y1="7" x2="22" y2="7" /></svg>,
   History: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>,
-  Subscriptions: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 17H2a3 3 0 0 0 3-3V9a7 7 0 0 1 14 0v5a3 3 0 0 0 3 3zm-8.27 4a2 2 0 0 1-3.46 0" /></svg>,
+  Channels: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>,
   Profile: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>,
   Media: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2" /><path d="M12 2v20" /><path d="M2 12h20" /></svg>,
   Admin: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>,
@@ -69,8 +69,8 @@ function Sidebar({ active, onSelect, onLogout, userRole }) {
     { id: 'home', label: 'Home', Icon: Icons.Home },
     { id: 'reels', label: 'Reels', Icon: Icons.Reels },
     { id: 'media', label: 'My Media', Icon: Icons.Media },
+    { id: 'channels', label: 'Channels', Icon: Icons.Channels },
     { id: 'history', label: 'History', Icon: Icons.History },
-    { id: 'subs', label: 'Subscriptions', Icon: Icons.Subscriptions },
     { id: 'profile', label: 'Profile', Icon: Icons.Profile }
   ];
 
@@ -124,14 +124,14 @@ function Header({ page, onAdd, user }) {
     home: { title: 'Home', subtitle: `Welcome back, ${user.displayName || 'User'}` },
     reels: { title: 'Reels', subtitle: 'Short-form vertical videos' },
     media: { title: 'My Media', subtitle: 'Manage content & collaborations' },
+    channels: { title: 'Channels', subtitle: 'Discover and subscribe to creators' },
     history: { title: 'Watch History', subtitle: 'Videos you\'ve watched recently' },
-    subs: { title: 'Subscriptions', subtitle: 'Content from channels you follow' },
     profile: { title: 'Profile', subtitle: 'Manage your account and preferences' },
     admin: { title: 'Admin Panel', subtitle: 'System management and controls' }
   };
   const { title, subtitle } = titles[page] || titles.home;
 
-  const showAddButton = page !== 'admin';
+  const showAddButton = page !== 'admin' && page !== 'channels';
 
   return (
     <header className="header">
@@ -266,7 +266,7 @@ function Recorder({ onRecorded, onCancel }) {
   );
 }
 
-function AddVideoModal({ onClose, onUpload }) {
+function AddVideoModal({ onClose, onUpload, userChannels }) {
   const [mode, setMode] = React.useState(null);
   const [file, setFile] = React.useState(null);
   const [url, setUrl] = React.useState('');
@@ -276,7 +276,13 @@ function AddVideoModal({ onClose, onUpload }) {
   const [uploading, setUploading] = React.useState(false);
   const [loadingUrl, setLoadingUrl] = React.useState(false);
   const [isYoutube, setIsYoutube] = React.useState(false);
-  const [youtubeId, setYoutubeId] = React.useState(null);
+  const [selectedChannel, setSelectedChannel] = React.useState('');
+
+  React.useEffect(() => {
+    if (userChannels.length > 0 && !selectedChannel) {
+      setSelectedChannel(userChannels[0].id);
+    }
+  }, [userChannels]);
 
   function handleFileChange(e) {
     const f = e.target.files[0];
@@ -308,7 +314,6 @@ function AddVideoModal({ onClose, onUpload }) {
 
   async function downloadYoutubeVideo(videoUrl) {
     try {
-      // 1. Get the download URL from Cobalt
       const response = await fetch('https://api.cobalt.tools/api/json', {
         method: 'POST',
         headers: {
@@ -329,19 +334,13 @@ function AddVideoModal({ onClose, onUpload }) {
         throw new Error('Could not get download link from service');
       }
 
-      // 2. Fetch the video Blob
-      // Direct fetch usually fails due to CORS. We use a proxy.
       const fileUrl = data.url;
       let videoResponse;
 
       try {
-        // Try direct first (unlikely to work for YouTube, but good practice)
         videoResponse = await fetch(fileUrl);
         if (!videoResponse.ok) throw new Error('Direct fetch failed');
       } catch (err) {
-        // Fallback to CORS proxy
-        // Using corsproxy.io as a public proxy
-        // Syntax: https://corsproxy.io/?<url>
         console.log('Direct fetch failed, trying CORS proxy...');
         const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(fileUrl);
         videoResponse = await fetch(proxyUrl);
@@ -355,7 +354,6 @@ function AddVideoModal({ onClose, onUpload }) {
       return blob;
     } catch (error) {
       console.error('YouTube download failed:', error);
-      // Provide more specific error messages to the user
       if (error.message.includes('Could not get download link')) {
         throw new Error('Video service could not process this URL. It might be restricted or private.');
       }
@@ -371,13 +369,12 @@ function AddVideoModal({ onClose, onUpload }) {
       const videoId = extractVideoId(url);
 
       if (videoId) {
-        // Updated logic: Download YouTube video instead of embedding
         const blob = await downloadYoutubeVideo(url);
         setFile(blob);
         setPreview(URL.createObjectURL(blob));
-        setIsYoutube(false); // Treat as a normal file now
-        setMode('file'); // Switch to file mode to show preview
-        if (!title) setTitle(`YouTube Video ${videoId}`); // Set a default title if empty
+        setIsYoutube(false);
+        setMode('file');
+        if (!title) setTitle(`YouTube Video ${videoId}`);
         setLoadingUrl(false);
         return;
       }
@@ -419,11 +416,12 @@ function AddVideoModal({ onClose, onUpload }) {
   async function handleSubmit() {
     if (!title.trim()) return alert('Please enter a title');
     if (!file) return alert('Please select or record a video');
+    if (userChannels.length === 0) return alert('Please create a channel first');
+    if (!selectedChannel) return alert('Please select a channel');
 
     setUploading(true);
     try {
-      // Pass 'standard' or user selected type, treat as local file upload
-      await onUpload(file, videoType, title);
+      await onUpload(file, videoType, title, selectedChannel);
       onClose();
     } catch (e) {
       alert('Upload failed: ' + e.message);
@@ -523,6 +521,21 @@ function AddVideoModal({ onClose, onUpload }) {
               </div>
 
               <div className="input-group">
+                <label>Select Channel</label>
+                {userChannels.length === 0 ? (
+                  <div style={{ padding: 12, background: '#fff5f5', border: '1px solid #fed7d7', borderRadius: 4, color: '#c53030', fontSize: 13 }}>
+                    You need to create a channel first. Videos must be published to a channel.
+                  </div>
+                ) : (
+                  <select value={selectedChannel} onChange={e => setSelectedChannel(e.target.value)}>
+                    {userChannels.map(ch => (
+                      <option key={ch.id} value={ch.id}>{ch.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="input-group">
                 <label>Video Type</label>
                 <div className="type-selector">
                   <div className={`type-option ${videoType === 'standard' ? 'selected' : ''}`} onClick={() => setVideoType('standard')}>
@@ -537,7 +550,7 @@ function AddVideoModal({ onClose, onUpload }) {
               </div>
 
               <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-                <button className="btn btn-primary" onClick={handleSubmit} disabled={uploading} style={{ flex: 1 }}>
+                <button className="btn btn-primary" onClick={handleSubmit} disabled={uploading || userChannels.length === 0} style={{ flex: 1 }}>
                   {uploading ? <div className="loading-sm" /> : 'Upload Video'}
                 </button>
                 <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
@@ -550,10 +563,10 @@ function AddVideoModal({ onClose, onUpload }) {
   );
 }
 
-function VideoPlayer({ meta, onClose, subscriptions, onToggleSubscribe, userId }) {
+function VideoPlayer({ meta, onClose, onToggleSubscribe, userId, userSubscribedChannels }) {
   const [tracked, setTracked] = React.useState(false);
   const videoRef = React.useRef(null);
-  const isSubbed = subscriptions.includes(meta.channelName);
+  const isSubbed = meta.channelId && userSubscribedChannels.includes(meta.channelId);
   const startTimeRef = React.useRef(Date.now());
 
   const [liked, setLiked] = React.useState(false);
@@ -666,8 +679,10 @@ function VideoPlayer({ meta, onClose, subscriptions, onToggleSubscribe, userId }
             <button className={`btn ${liked ? 'btn-primary' : 'btn-secondary'}`} onClick={handleLike}>
               {liked ? 'Liked' : 'Like'} ({likeCount})
             </button>
-            {meta.channelName && meta.channelName !== 'You' && (
-              <button className="btn btn-secondary" onClick={() => onToggleSubscribe(meta.channelName)}>{isSubbed ? 'Unsub' : 'Subscribe'}</button>
+            {meta.channelId && (
+              <button className="btn btn-secondary" onClick={() => onToggleSubscribe(meta.channelId)}>
+                {isSubbed ? 'Unsubscribe' : 'Subscribe'}
+              </button>
             )}
             <button className="btn btn-danger" onClick={onClose}><Icons.Close /></button>
           </div>
@@ -696,7 +711,9 @@ export default function App() {
 
   const [active, setActive] = React.useState('home');
   const [videos, setVideos] = React.useState([]);
-  const [subscriptions, setSubscriptions] = React.useState([]);
+  const [channels, setChannels] = React.useState([]);
+  const [userChannels, setUserChannels] = React.useState([]);
+  const [subscribedChannels, setSubscribedChannels] = React.useState([]);
   const [showAdd, setShowAdd] = React.useState(false);
   const [playing, setPlaying] = React.useState(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -724,13 +741,13 @@ export default function App() {
         const userData = docSnap.data();
         setUserRole(userData.role || 'user');
         setUserBanned(userData.banned || false);
-        setSubscriptions(userData.subscriptions || []);
+        setSubscribedChannels(userData.subscribedChannels || []);
       } else {
         await setDoc(userRef, {
           email: user.email,
           displayName: user.displayName,
           role: 'user',
-          subscriptions: [],
+          subscribedChannels: [],
           banned: false,
           createdAt: new Date().toISOString()
         });
@@ -760,9 +777,31 @@ export default function App() {
     return () => { unsubscribe(); clearTimeout(safetyTimeout); };
   }, []);
 
-  async function handleUpload(fileOrBlob, kind, title) {
+  React.useEffect(() => {
+    const q = query(collection(db, 'channels'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const channelList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setChannels(channelList);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  React.useEffect(() => {
+    if (!user) {
+      setUserChannels([]);
+      return;
+    }
+    const userChannelsList = channels.filter(ch => ch.ownerId === user.uid);
+    setUserChannels(userChannelsList);
+  }, [channels, user]);
+
+  async function handleUpload(fileOrBlob, kind, title, channelId) {
     if (!user) return alert("Please sign in to upload.");
     if (userBanned) return alert("Your account has been banned. You cannot upload videos.");
+    if (!channelId) return alert("Please select a channel.");
+
+    const channel = channels.find(ch => ch.id === channelId);
+    if (!channel) return alert("Channel not found.");
 
     const safeTitle = title.replace(/[^a-z0-9]/gi, '_');
 
@@ -804,7 +843,8 @@ export default function App() {
     await addDoc(collection(db, 'videos'), {
       title: title || 'Untitled',
       type: kind,
-      channelName: user.displayName || 'Anonymous',
+      channelId: channelId,
+      channelName: channel.name,
       creatorId: user.uid,
       createdAt: new Date().toISOString(),
       url: downloadURL,
@@ -819,19 +859,32 @@ export default function App() {
       shares: 0
     });
 
+    await updateDoc(doc(db, 'channels', channelId), {
+      videoCount: increment(1),
+      updatedAt: new Date().toISOString()
+    });
+
     setActive('media');
     alert("Upload successful! Your video is in 'My Media'.");
   }
 
-  async function toggleSubscribe(channel) {
+  async function toggleSubscribe(channelId) {
     if (!user) return alert("Sign in to subscribe.");
     if (userBanned) return alert("Your account has been banned.");
 
     const userRef = doc(db, 'users', user.uid);
-    let newSubs = subscriptions.includes(channel)
-      ? subscriptions.filter(s => s !== channel)
-      : [...subscriptions, channel];
-    await setDoc(userRef, { subscriptions: newSubs }, { merge: true });
+    let newSubs = subscribedChannels.includes(channelId)
+      ? subscribedChannels.filter(s => s !== channelId)
+      : [...subscribedChannels, channelId];
+
+    await setDoc(userRef, { subscribedChannels: newSubs }, { merge: true });
+
+    const channelRef = doc(db, 'channels', channelId);
+    if (subscribedChannels.includes(channelId)) {
+      await updateDoc(channelRef, { subscribers: increment(-1) });
+    } else {
+      await updateDoc(channelRef, { subscribers: increment(1) });
+    }
   }
 
   function handleLogout() {
@@ -861,7 +914,15 @@ export default function App() {
     );
   }
 
-  const pageProps = { onPlay: setPlaying, onToggleSubscribe: toggleSubscribe, subscriptions, isLoading, user };
+  const pageProps = {
+    onPlay: setPlaying,
+    onToggleSubscribe: toggleSubscribe,
+    isLoading,
+    user,
+    channels,
+    userChannels,
+    subscribedChannels
+  };
 
   return (
     <div className="app">
@@ -870,16 +931,32 @@ export default function App() {
         <Header page={active} onAdd={() => setShowAdd(true)} user={user} />
         <div className="content">
           {active === 'home' && <Home videos={homeVideos} {...pageProps} />}
-          {active === 'reels' && <Reels videos={reelsVideos} {...pageProps} userId={user.uid} />}
+          {active === 'reels' && (
+            <Reels
+              videos={reelsVideos}
+              userId={user.uid}
+              onToggleSubscribe={toggleSubscribe}
+              subscribedChannels={subscribedChannels}
+              isLoading={isLoading}
+            />
+          )}
           {active === 'media' && <Media videos={videos} {...pageProps} />}
+          {active === 'channels' && <Channels {...pageProps} videos={videos} />}
           {active === 'history' && <History userId={user.uid} videos={videos} onReplay={setPlaying} />}
-          {active === 'subs' && <Subscriptions videos={homeVideos} {...pageProps} />}
-          {active === 'profile' && <Profile videos={videos} subscriptions={subscriptions} user={user} />}
+          {active === 'profile' && <Profile videos={videos} channels={userChannels} user={user} />}
           {active === 'admin' && <Admin user={user} />}
         </div>
       </main>
-      {showAdd && <AddVideoModal onClose={() => setShowAdd(false)} onUpload={handleUpload} />}
-      {playing && <VideoPlayer meta={playing} onClose={() => setPlaying(null)} subscriptions={subscriptions} onToggleSubscribe={toggleSubscribe} userId={user.uid} />}
+      {showAdd && <AddVideoModal onClose={() => setShowAdd(false)} onUpload={handleUpload} userChannels={userChannels} />}
+      {playing && (
+        <VideoPlayer
+          meta={playing}
+          onClose={() => setPlaying(null)}
+          onToggleSubscribe={toggleSubscribe}
+          userId={user.uid}
+          userSubscribedChannels={subscribedChannels}
+        />
+      )}
     </div>
   );
 }

@@ -1,56 +1,68 @@
 import React from 'react';
-import { doc, updateDoc, arrayUnion, arrayRemove, increment, addDoc, collection, getDoc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
+import { doc, updateDoc, increment, addDoc, collection, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
-function ReelItem({ video, isActive, onToggleSubscribe, subscriptions, user }) {
+const Icons = {
+  Heart: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>,
+  HeartOutline: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>,
+  Play: () => <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>,
+  Pause: () => <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>,
+  Volume: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /></svg>,
+  VolumeX: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></svg>,
+};
+
+function ReelCard({ video, isActive, userId, onToggleSubscribe, isSubscribed }) {
   const videoRef = React.useRef(null);
-  const [muted, setMuted] = React.useState(true);
+  const [isPlaying, setIsPlaying] = React.useState(false);
+  const [isMuted, setIsMuted] = React.useState(true);
   const [liked, setLiked] = React.useState(false);
-  const [likeLoading, setLikeLoading] = React.useState(false);
+  const [likeCount, setLikeCount] = React.useState(video.likes || 0);
   const [tracked, setTracked] = React.useState(false);
   const startTimeRef = React.useRef(Date.now());
-  const viewTrackedRef = React.useRef(false);
 
-  const isSubbed = subscriptions.includes(video.channelName);
-  // We can rely on video.likes from props for the count, as we have real-time updates from parent
-  // But strictly speaking, the parent passes 'video' from its list, which might be stale if not careful.
-  // However, App.jsx has a listener on 'videos', so props should update.
-  const likeCount = video.likes || 0;
-
-  // Check if user has liked this video
+  // Listen to like status
   React.useEffect(() => {
-    if (!user || !video.id) {
-      setLiked(false);
-      return;
-    }
-
-    // Realtime listener for like status
-    const likeRef = doc(db, 'users', user.uid, 'likedVideos', video.id);
+    if (!userId || !video.id) return;
+    const likeRef = doc(db, 'users', userId, 'likedVideos', video.id);
     const unsub = onSnapshot(likeRef, (snap) => {
       setLiked(snap.exists());
     });
+    const videoRefDoc = doc(db, 'videos', video.id);
+    const unsubVideo = onSnapshot(videoRefDoc, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setLikeCount(data.likes || 0);
+      }
+    });
+    return () => {
+      unsub();
+      unsubVideo();
+    };
+  }, [userId, video.id]);
 
-    return () => unsub();
-  }, [user, video.id]);
-
+  // Auto-play when active
   React.useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
 
     if (isActive) {
-      vid.currentTime = 0;
-      vid.play().catch(err => console.log("Autoplay prevented:", err));
-      startTimeRef.current = Date.now();
+      vid.play().then(() => {
+        setIsPlaying(true);
+      }).catch(err => {
+        console.log('Autoplay prevented:', err);
+        setIsPlaying(false);
+      });
 
-      if (!viewTrackedRef.current) {
+      // Track view after 1 second
+      const viewTimer = setTimeout(() => {
         trackView();
-        viewTrackedRef.current = true;
-      }
+      }, 1000);
+
+      return () => clearTimeout(viewTimer);
     } else {
       vid.pause();
-      if (tracked && user) {
-        trackWatchSession();
-      }
+      vid.currentTime = 0;
+      setIsPlaying(false);
     }
   }, [isActive]);
 
@@ -65,377 +77,315 @@ function ReelItem({ video, isActive, onToggleSubscribe, subscriptions, user }) {
     }
   }
 
-  async function trackWatchSession() {
-    if (!user) return;
-
-    const vid = videoRef.current;
-    if (!vid) return;
-
-    const watchTime = Math.floor((Date.now() - startTimeRef.current) / 1000);
-    const progress = vid.duration ? (vid.currentTime / vid.duration) : 0;
-
-    if (watchTime < 2) return;
-
-    try {
-      await addDoc(collection(db, 'users', user.uid, 'history'), {
-        videoId: video.id,
-        title: video.title,
-        channelName: video.channelName || 'Unknown',
-        thumbnail: video.url,
-        watchedAt: new Date().toISOString(),
-        progress: Math.min(1, progress),
-        watchTime: watchTime,
-        videoType: 'reel'
-      });
-
-      await updateDoc(doc(db, 'videos', video.id), {
-        watchTime: increment(watchTime),
-        completions: progress >= 0.9 ? increment(1) : increment(0)
-      });
-    } catch (e) {
-      console.error('Error tracking history:', e);
-    }
-  }
-
-  React.useEffect(() => {
-    return () => {
-      if (tracked && user) {
-        trackWatchSession();
-      }
-    };
-  }, []);
-
-  function toggleMute(e) {
-    e.stopPropagation();
-    setMuted(!muted);
-  }
-
-  async function handleLike(e) {
-    e.stopPropagation();
-    if (!user) return alert("Please sign in to like videos.");
-    if (likeLoading) return;
-
-    setLikeLoading(true);
-    const videoRef = doc(db, 'videos', video.id);
-    const userLikeRef = doc(db, 'users', user.uid, 'likedVideos', video.id);
+  async function handleLike() {
+    if (!userId) return alert("Sign in to like.");
+    const videoRefDoc = doc(db, 'videos', video.id);
+    const userLikeRef = doc(db, 'users', userId, 'likedVideos', video.id);
 
     try {
       if (liked) {
-        // Unlike
         await deleteDoc(userLikeRef);
-        await updateDoc(videoRef, { likes: increment(-1) });
+        await updateDoc(videoRefDoc, { likes: increment(-1) });
       } else {
-        // Like
         await setDoc(userLikeRef, { likedAt: new Date().toISOString() });
-        await updateDoc(videoRef, { likes: increment(1) });
+        await updateDoc(videoRefDoc, { likes: increment(1) });
       }
     } catch (e) {
-      console.error('Error updating like:', e);
-      alert("Failed to update like. Please try again.");
-    } finally {
-      setLikeLoading(false);
+      console.error('Error toggling like:', e);
     }
   }
 
-  async function handleShare(e) {
-    e.stopPropagation();
-    try {
-      await updateDoc(doc(db, 'videos', video.id), {
-        shares: increment(1)
-      });
-
-      if (navigator.share) {
-        await navigator.share({
-          title: video.title,
-          text: `Check out this reel by ${video.channelName}`,
-          url: window.location.href
-        });
-      } else {
-        await navigator.clipboard.writeText(window.location.href);
-        alert('Share link copied!');
-      }
-    } catch (e) {
-      console.error('Error sharing:', e);
-    }
-  }
-
-  function handleTimeUpdate() {
+  function togglePlayPause() {
     const vid = videoRef.current;
-    if (!vid || tracked || !user) return;
+    if (!vid) return;
 
-    const progress = vid.duration ? (vid.currentTime / vid.duration) : 0;
-    if (vid.currentTime >= 3 || progress >= 0.3) {
+    if (isPlaying) {
+      vid.pause();
+      setIsPlaying(false);
+    } else {
+      vid.play();
+      setIsPlaying(true);
+    }
+  }
+
+  function toggleMute() {
+    const vid = videoRef.current;
+    if (!vid) return;
+    vid.muted = !vid.muted;
+    setIsMuted(vid.muted);
+  }
+
+  async function onTimeUpdate() {
+    const v = videoRef.current;
+    if (!v || tracked || !userId) return;
+    const progress = v.duration ? (v.currentTime / v.duration) : 0;
+    if (v.currentTime >= 5 || progress >= 0.5) {
+      try {
+        const watchTime = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        await addDoc(collection(db, 'users', userId, 'history'), {
+          videoId: video.id,
+          title: video.title,
+          channelName: video.channelName || 'Unknown',
+          thumbnail: video.thumbnail || video.url,
+          watchedAt: new Date().toISOString(),
+          progress: Math.min(1, progress),
+          watchTime: watchTime,
+          videoType: video.type || 'reel'
+        });
+
+        await updateDoc(doc(db, 'videos', video.id), {
+          watchTime: increment(watchTime),
+          completions: progress >= 0.9 ? increment(1) : increment(0)
+        });
+      } catch (e) {
+        console.error('Error tracking history:', e);
+      }
       setTracked(true);
     }
   }
 
   return (
-    <div className="reel-item" style={styles.itemContainer}>
+    <div className="reel-card">
       <video
         ref={videoRef}
         src={video.url}
-        style={styles.video}
+        className="reel-video"
         loop
         playsInline
-        muted={muted}
-        onClick={toggleMute}
-        onTimeUpdate={handleTimeUpdate}
+        muted={isMuted}
+        onTimeUpdate={onTimeUpdate}
+        onClick={togglePlayPause}
       />
 
-      <div style={styles.overlay}>
-
-        <div style={styles.actionsColumn}>
-
-          <div style={styles.actionBtnContainer}>
-            <div style={styles.avatar}>
-              {video.channelName[0].toUpperCase()}
-            </div>
-            {!isSubbed && video.creatorId !== user?.uid && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onToggleSubscribe(video.channelName); }}
-                style={styles.subscribeBadge}
-              >
-                +
-              </button>
-            )}
-          </div>
-
-          <div style={styles.actionBtnContainer} onClick={handleLike}>
-            <div style={{ ...styles.iconBase, color: liked ? '#ff2d55' : '#fff', transform: liked ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.2s' }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill={liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-              </svg>
-            </div>
-            <span style={styles.actionText}>{likeCount}</span>
-          </div>
-
-          <div style={styles.actionBtnContainer} onClick={handleShare}>
-            <div style={styles.iconBase}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-              </svg>
-            </div>
-            <span style={styles.actionText}>Share</span>
-          </div>
-
-          <div style={styles.actionBtnContainer} onClick={toggleMute}>
-            <div style={styles.iconBase}>
-              {muted ? (
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="1" y1="1" x2="23" y2="23" /><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" /></svg>
-              ) : (
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
-              )}
-            </div>
-            <span style={styles.actionText}>{muted ? 'Muted' : 'Sound On'}</span>
-          </div>
-
-        </div>
-
-        <div style={styles.infoArea}>
-          <div style={styles.channelName}>@{video.channelName.replace(/\s+/g, '')}</div>
-          <div style={styles.videoTitle}>{video.title}</div>
-          <div style={styles.statsRow}>
-            <span>{video.views || 0} views</span>
-            <span>•</span>
-            <span>{new Date(video.createdAt).toLocaleDateString()}</span>
+      {/* Play/Pause Overlay */}
+      {!isPlaying && (
+        <div className="reel-play-overlay" onClick={togglePlayPause}>
+          <div style={{
+            width: 80,
+            height: 80,
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.3)',
+            backdropFilter: 'blur(10px)',
+            display: 'grid',
+            placeItems: 'center',
+            cursor: 'pointer'
+          }}>
+            <Icons.Play />
           </div>
         </div>
+      )}
 
+      {/* Video Info Overlay */}
+      <div className="reel-info">
+        <div style={{ flex: 1 }}>
+          <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+            {video.title}
+          </h3>
+          <div style={{ fontSize: 14, marginBottom: 4, color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+            <strong>@{video.channelName || 'Unknown'}</strong>
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+            {video.views || 0} views • {likeCount} likes
+          </div>
+          {video.description && (
+            <p style={{ fontSize: 13, marginTop: 8, color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.5)', maxWidth: '90%' }}>
+              {video.description.slice(0, 100)}{video.description.length > 100 ? '...' : ''}
+            </p>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="reel-actions">
+          <button
+            className="reel-action-btn"
+            onClick={handleLike}
+            style={{ color: liked ? '#ff4757' : '#fff' }}
+          >
+            {liked ? <Icons.Heart /> : <Icons.HeartOutline />}
+            <span style={{ fontSize: 12, marginTop: 4 }}>{likeCount}</span>
+          </button>
+
+          {video.channelId && (
+            <button
+              className="reel-action-btn"
+              onClick={() => onToggleSubscribe(video.channelId)}
+              style={{
+                background: isSubscribed ? 'rgba(255,255,255,0.2)' : 'var(--accent-gold)',
+                color: isSubscribed ? '#fff' : '#000',
+                fontSize: 11,
+                padding: '4px'
+              }}
+            >
+              {isSubscribed ? 'Subscribed' : 'Subscribe'}
+            </button>
+          )}
+
+          <button
+            className="reel-action-btn"
+            onClick={toggleMute}
+          >
+            {isMuted ? <Icons.VolumeX /> : <Icons.Volume />}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-export default function Reels({ videos, subscriptions, onToggleSubscribe, user, userId }) {
-  const reels = React.useMemo(() => videos.filter(v => v.type === 'reel'), [videos]);
-
-  const [activeIndex, setActiveIndex] = React.useState(0);
-
+export default function Reels({ videos, userId, onToggleSubscribe, subscribedChannels, isLoading }) {
+  const [currentIndex, setCurrentIndex] = React.useState(0);
   const containerRef = React.useRef(null);
-  const itemRefs = React.useRef([]);
+  const touchStartY = React.useRef(0);
+  const isScrolling = React.useRef(false);
+
+  // Filter ONLY for reel type videos that are published
+  const reelVideos = videos.filter(v => v.published === true && v.type === 'reel');
 
   React.useEffect(() => {
-    const observerOptions = {
-      root: containerRef.current,
-      threshold: 0.6
+    const container = containerRef.current;
+    if (!container) return;
+
+    function handleWheel(e) {
+      if (isScrolling.current) return;
+
+      e.preventDefault();
+      isScrolling.current = true;
+
+      if (e.deltaY > 0 && currentIndex < reelVideos.length - 1) {
+        setCurrentIndex(prev => prev + 1);
+      } else if (e.deltaY < 0 && currentIndex > 0) {
+        setCurrentIndex(prev => prev - 1);
+      }
+
+      setTimeout(() => {
+        isScrolling.current = false;
+      }, 500);
+    }
+
+    function handleTouchStart(e) {
+      touchStartY.current = e.touches[0].clientY;
+    }
+
+    function handleTouchEnd(e) {
+      if (isScrolling.current) return;
+
+      const touchEndY = e.changedTouches[0].clientY;
+      const diff = touchStartY.current - touchEndY;
+
+      if (Math.abs(diff) < 50) return;
+
+      isScrolling.current = true;
+
+      if (diff > 0 && currentIndex < reelVideos.length - 1) {
+        setCurrentIndex(prev => prev + 1);
+      } else if (diff < 0 && currentIndex > 0) {
+        setCurrentIndex(prev => prev - 1);
+      }
+
+      setTimeout(() => {
+        isScrolling.current = false;
+      }, 500);
+    }
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    container.addEventListener('touchstart', handleTouchStart);
+    container.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchend', handleTouchEnd);
     };
+  }, [currentIndex, reelVideos.length]);
 
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const index = Number(entry.target.dataset.index);
-          setActiveIndex(index);
-        }
-      });
-    }, observerOptions);
+  // Keyboard navigation
+  React.useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === 'ArrowDown' && currentIndex < reelVideos.length - 1) {
+        setCurrentIndex(prev => prev + 1);
+      } else if (e.key === 'ArrowUp' && currentIndex > 0) {
+        setCurrentIndex(prev => prev - 1);
+      }
+    }
 
-    itemRefs.current.forEach(el => {
-      if (el) observer.observe(el);
-    });
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentIndex, reelVideos.length]);
 
-    return () => observer.disconnect();
-  }, [reels]);
-
-  if (reels.length === 0) {
+  if (isLoading) {
     return (
-      <div className="empty">
-        <div className="empty-icon"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" /><line x1="7" y1="2" x2="7" y2="22" /><line x1="17" y1="2" x2="17" y2="22" /><line x1="2" y1="12" x2="22" y2="12" /></svg></div>
-        <div className="empty-title">No Reels Yet</div>
-        <div className="empty-text">Upload a vertical video and select "Reel" to see it here.</div>
+      <div className="reels-container" style={{ display: 'grid', placeItems: 'center' }}>
+        <div>
+          <div className="loading" />
+          <div style={{ marginTop: 20, color: '#fff', textAlign: 'center' }}>Loading reels...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (reelVideos.length === 0) {
+    return (
+      <div className="reels-container" style={{ display: 'grid', placeItems: 'center', textAlign: 'center' }}>
+        <div>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>📱</div>
+          <h2 style={{ fontSize: 28, fontWeight: 800, color: '#fff', marginBottom: 8 }}>No Reels Yet</h2>
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 16 }}>
+            Upload your first video and mark it as a "Reel" to see it here
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div
-      ref={containerRef}
-      style={styles.container}
-      className="reels-snap-container"
-    >
-      {reels.map((reel, index) => (
+    <div className="reels-container" ref={containerRef}>
+      {reelVideos.map((video, index) => (
         <div
-          key={reel.id}
-          data-index={index}
-          ref={el => itemRefs.current[index] = el}
-          style={{ width: '100%', height: '100%' }}
+          key={video.id}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            transform: `translateY(${(index - currentIndex) * 100}%)`,
+            transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+            opacity: index === currentIndex ? 1 : 0.3,
+            pointerEvents: index === currentIndex ? 'auto' : 'none'
+          }}
         >
-          <ReelItem
-            video={reel}
-            isActive={index === activeIndex}
-            subscriptions={subscriptions}
+          <ReelCard
+            video={video}
+            isActive={index === currentIndex}
+            userId={userId}
             onToggleSubscribe={onToggleSubscribe}
-            user={user}
+            isSubscribed={video.channelId && subscribedChannels.includes(video.channelId)}
           />
         </div>
       ))}
+
+      {/* Navigation Indicators */}
+      <div className="reels-nav-dots">
+        {reelVideos.map((_, index) => (
+          <div
+            key={index}
+            onClick={() => setCurrentIndex(index)}
+            className={`reels-nav-dot ${index === currentIndex ? 'active' : ''}`}
+          />
+        ))}
+      </div>
+
+      {/* Counter */}
+      <div className="reels-counter">
+        {currentIndex + 1} / {reelVideos.length}
+      </div>
+
+      {/* Scroll Hint */}
+      {currentIndex === 0 && reelVideos.length > 1 && (
+        <div className="reels-scroll-hint">
+          ↓ Scroll or swipe for more
+        </div>
+      )}
     </div>
   );
 }
-
-const styles = {
-  container: {
-    height: 'calc(100vh - 120px)',
-    width: '100%',
-    overflowY: 'scroll',
-    scrollSnapType: 'y mandatory',
-    backgroundColor: '#000',
-    position: 'relative',
-    scrollbarWidth: 'none',
-    msOverflowStyle: 'none',
-  },
-  itemContainer: {
-    height: '100%',
-    width: '100%',
-    position: 'relative',
-    scrollSnapAlign: 'start',
-    display: 'flex',
-    justifyContent: 'center',
-    background: '#121212'
-  },
-  video: {
-    height: '100%',
-    width: '100%',
-    objectFit: 'cover',
-    maxWidth: '500px',
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'flex-end',
-    pointerEvents: 'none',
-  },
-  actionsColumn: {
-    position: 'absolute',
-    right: 16,
-    bottom: 100,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 20,
-    alignItems: 'center',
-    pointerEvents: 'auto',
-    zIndex: 10
-  },
-  actionBtnContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    cursor: 'pointer'
-  },
-  iconBase: {
-    width: 40,
-    height: 40,
-    display: 'grid',
-    placeItems: 'center',
-    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
-  },
-  actionText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 600,
-    marginTop: 4,
-    textShadow: '0 1px 2px rgba(0,0,0,0.5)'
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: '50%',
-    background: '#fff',
-    color: '#000',
-    display: 'grid',
-    placeItems: 'center',
-    fontWeight: 800,
-    fontSize: 20,
-    border: '2px solid #fff',
-    marginBottom: 10
-  },
-  subscribeBadge: {
-    position: 'absolute',
-    bottom: 5,
-    width: 20,
-    height: 20,
-    background: '#ff2d55',
-    color: '#fff',
-    borderRadius: '50%',
-    display: 'grid',
-    placeItems: 'center',
-    fontSize: 16,
-    border: 'none',
-    cursor: 'pointer'
-  },
-  infoArea: {
-    padding: '20px',
-    paddingBottom: '40px',
-    background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)',
-    color: '#fff',
-    textAlign: 'left',
-    width: '100%',
-    pointerEvents: 'auto'
-  },
-  channelName: {
-    fontWeight: 700,
-    fontSize: 16,
-    marginBottom: 8,
-    cursor: 'pointer'
-  },
-  videoTitle: {
-    fontSize: 14,
-    marginBottom: 8,
-    lineHeight: 1.4
-  },
-  statsRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 12,
-    opacity: 0.9
-  }
-};

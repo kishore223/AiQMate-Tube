@@ -18,27 +18,25 @@ function StatCard({ icon, label, value, color = '#d4a574' }) {
   );
 }
 
-export default function Profile({ videos, subscriptions, user }) {
+export default function Profile({ videos, channels, user }) {
   const [historyCount, setHistoryCount] = React.useState(0);
 
   React.useEffect(() => {
     async function fetchStats() {
       if (!user) return;
-      // Fetch history for THIS specific user
       const snap = await getDocs(collection(db, 'users', user.uid, 'history'));
       setHistoryCount(snap.size);
     }
     fetchStats();
   }, [user]);
 
-  // Filter videos created by THIS user
-  const myVideos = videos.filter(v => v.creatorId === user?.uid || v.channelName === user?.displayName);
+  const myVideos = videos.filter(v => v.creatorId === user?.uid);
 
   const stats = {
     totalVideos: myVideos.length,
     reels: myVideos.filter(v => v.type === 'reel').length,
     watched: historyCount,
-    subscriptions: subscriptions.length
+    channels: channels.length
   };
 
   return (
@@ -57,7 +55,7 @@ export default function Profile({ videos, subscriptions, user }) {
         <StatCard icon={<span>V</span>} label="My Videos" value={stats.totalVideos} />
         <StatCard icon={<span>R</span>} label="My Reels" value={stats.reels} />
         <StatCard icon={<span>H</span>} label="Watched" value={stats.watched} />
-        <StatCard icon={<span>S</span>} label="Subscriptions" value={stats.subscriptions} />
+        <StatCard icon={<span>C</span>} label="My Channels" value={stats.channels} />
       </div>
 
       <div style={{ marginBottom: 32 }}>
