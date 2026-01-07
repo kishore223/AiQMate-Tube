@@ -278,11 +278,7 @@ function AddVideoModal({ onClose, onUpload, userChannels }) {
   const [isYoutube, setIsYoutube] = React.useState(false);
   const [selectedChannel, setSelectedChannel] = React.useState('');
 
-  React.useEffect(() => {
-    if (userChannels.length > 0 && !selectedChannel) {
-      setSelectedChannel(userChannels[0].id);
-    }
-  }, [userChannels]);
+  // Removed automatic channel selection effect
 
   function handleFileChange(e) {
     const f = e.target.files[0];
@@ -416,12 +412,10 @@ function AddVideoModal({ onClose, onUpload, userChannels }) {
   async function handleSubmit() {
     if (!title.trim()) return alert('Please enter a title');
     if (!file) return alert('Please select or record a video');
-    if (userChannels.length === 0) return alert('Please create a channel first');
-    if (!selectedChannel) return alert('Please select a channel');
 
     setUploading(true);
     try {
-      await onUpload(file, videoType, title, selectedChannel);
+      await onUpload(file, videoType, title, null); // Pass null for channelId
       onClose();
     } catch (e) {
       alert('Upload failed: ' + e.message);
@@ -520,20 +514,7 @@ function AddVideoModal({ onClose, onUpload, userChannels }) {
                 <input type="text" placeholder="My Amazing Video" value={title} onChange={e => setTitle(e.target.value)} />
               </div>
 
-              <div className="input-group">
-                <label>Select Channel</label>
-                {userChannels.length === 0 ? (
-                  <div style={{ padding: 12, background: '#fff5f5', border: '1px solid #fed7d7', borderRadius: 4, color: '#c53030', fontSize: 13 }}>
-                    You need to create a channel first. Videos must be published to a channel.
-                  </div>
-                ) : (
-                  <select value={selectedChannel} onChange={e => setSelectedChannel(e.target.value)}>
-                    {userChannels.map(ch => (
-                      <option key={ch.id} value={ch.id}>{ch.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
+
 
               <div className="input-group">
                 <label>Video Type</label>
@@ -550,7 +531,7 @@ function AddVideoModal({ onClose, onUpload, userChannels }) {
               </div>
 
               <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-                <button className="btn btn-primary" onClick={handleSubmit} disabled={uploading || userChannels.length === 0} style={{ flex: 1 }}>
+                <button className="btn btn-primary" onClick={handleSubmit} disabled={uploading} style={{ flex: 1 }}>
                   {uploading ? <div className="loading-sm" /> : 'Upload Video'}
                 </button>
                 <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
@@ -564,10 +545,13 @@ function AddVideoModal({ onClose, onUpload, userChannels }) {
 }
 
 function VideoPlayer({ meta, onClose, onToggleSubscribe, userId, userSubscribedChannels }) {
-  const [tracked, setTracked] = React.useState(false);
+  const [tracked, setTracked] = React.useState(false); // Used for initial view count only
   const videoRef = React.useRef(null);
   const isSubbed = meta.channelId && userSubscribedChannels.includes(meta.channelId);
   const startTimeRef = React.useRef(Date.now());
+  const lastUpdateRef = React.useRef(0);
+  const lastWatchTimeRef = React.useRef(0);
+  const completionTrackedRef = React.useRef(false);
 
   const [liked, setLiked] = React.useState(false);
   const [likeCount, setLikeCount] = React.useState(meta.likes || 0);
@@ -635,30 +619,50 @@ function VideoPlayer({ meta, onClose, onToggleSubscribe, userId, userSubscribedC
 
   async function onTime() {
     const v = videoRef.current;
-    if (!v || tracked || !userId || (meta.provider === 'youtube')) return;
+    if (!v || !userId || (meta.provider === 'youtube')) return;
+
+    const now = Date.now();
+    // Throttle updates to every 5 seconds to prevent excessive writes
+    if (now - lastUpdateRef.current < 5000) return;
+
     const progress = v.duration ? (v.currentTime / v.duration) : 0;
-    if (v.currentTime >= 5 || progress >= 0.5) {
+    const sessionWatchTime = Math.floor((now - startTimeRef.current) / 1000);
+    const deltaWatchTime = Math.max(0, sessionWatchTime - lastWatchTimeRef.current);
+
+    if (deltaWatchTime > 0 || progress > 0) {
       try {
-        const watchTime = Math.floor((Date.now() - startTimeRef.current) / 1000);
-        await addDoc(collection(db, 'users', userId, 'history'), {
+        const updates = {
+          progress: Math.min(1, progress),
+          watchTime: increment(deltaWatchTime)
+        };
+
+        // Handle completion (only once per session)
+        if (progress >= 0.9 && !completionTrackedRef.current) {
+          updates.completions = increment(1);
+          completionTrackedRef.current = true;
+        }
+
+        await setDoc(doc(db, 'users', userId, 'history', meta.id), {
           videoId: meta.id,
           title: meta.title,
           channelName: meta.channelName || 'Unknown',
           thumbnail: meta.url,
           watchedAt: new Date().toISOString(),
-          progress: Math.min(1, progress),
-          watchTime: watchTime,
-          videoType: meta.type || 'standard'
+          videoType: meta.type || 'standard',
+          ...updates
+        }, { merge: true });
+
+        // Update global video stats
+        await updateDoc(doc(db, 'videos', meta.id), {
+          watchTime: increment(deltaWatchTime),
+          ...(progress >= 0.9 && updates.completions ? { completions: increment(1) } : {})
         });
 
-        await updateDoc(doc(db, 'videos', meta.id), {
-          watchTime: increment(watchTime),
-          completions: progress >= 0.9 ? increment(1) : increment(0)
-        });
+        lastWatchTimeRef.current = sessionWatchTime;
+        lastUpdateRef.current = now;
       } catch (e) {
         console.error('Error tracking history:', e);
       }
-      setTracked(true);
     }
   }
 
@@ -798,10 +802,13 @@ export default function App() {
   async function handleUpload(fileOrBlob, kind, title, channelId) {
     if (!user) return alert("Please sign in to upload.");
     if (userBanned) return alert("Your account has been banned. You cannot upload videos.");
-    if (!channelId) return alert("Please select a channel.");
-
-    const channel = channels.find(ch => ch.id === channelId);
-    if (!channel) return alert("Channel not found.");
+    // Channel is optional during initial upload
+    let channelName = '';
+    if (channelId) {
+      const channel = channels.find(ch => ch.id === channelId);
+      if (!channel) return alert("Channel not found.");
+      channelName = channel.name;
+    }
 
     const safeTitle = title.replace(/[^a-z0-9]/gi, '_');
 
@@ -843,8 +850,8 @@ export default function App() {
     await addDoc(collection(db, 'videos'), {
       title: title || 'Untitled',
       type: kind,
-      channelId: channelId,
-      channelName: channel.name,
+      channelId: channelId || '',
+      channelName: channelName,
       creatorId: user.uid,
       createdAt: new Date().toISOString(),
       url: downloadURL,
@@ -859,10 +866,12 @@ export default function App() {
       shares: 0
     });
 
-    await updateDoc(doc(db, 'channels', channelId), {
-      videoCount: increment(1),
-      updatedAt: new Date().toISOString()
-    });
+    if (channelId) {
+      await updateDoc(doc(db, 'channels', channelId), {
+        videoCount: increment(1),
+        updatedAt: new Date().toISOString()
+      });
+    }
 
     setActive('media');
     alert("Upload successful! Your video is in 'My Media'.");
@@ -938,6 +947,7 @@ export default function App() {
               onToggleSubscribe={toggleSubscribe}
               subscribedChannels={subscribedChannels}
               isLoading={isLoading}
+              onPlay={setPlaying}
             />
           )}
           {active === 'media' && <Media videos={videos} {...pageProps} />}

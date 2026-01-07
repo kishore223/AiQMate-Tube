@@ -1341,177 +1341,234 @@ label {
   transform: scale(1.2);
 }
 
-/* Reels Container */
-.reels-container {
+/* ==================== REELS PAGE ==================== */
+
+.reels-scroll-container {
   position: relative;
   width: 100%;
-  height: calc(100vh - 80px);
-  /* Account for header */
-  background: #000;
+  height: calc(100vh - var(--header-h) - 56px);
   overflow: hidden;
+  background: transparent;
+  border-radius: 4px;
+  /* Matching .card radius slightly adjusted */
+  box-shadow: var(--shadow-medium);
 }
 
-/* Reel Card */
-.reel-card {
-  position: relative;
+.reels-scroll-wrapper {
   width: 100%;
   height: 100%;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.reel-scroll-item {
+  width: 100%;
+  height: 100%;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.reel-video-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  /* Allow full width of container */
+  margin: 0 auto;
   background: #000;
+  display: flex;
+  justify-content: center;
 }
 
 .reel-video {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #000;
+  cursor: pointer;
 }
 
 .reel-play-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   display: grid;
   place-items: center;
-  z-index: 2;
+  background: rgba(26, 24, 22, 0.4);
+  backdrop-filter: blur(4px);
   cursor: pointer;
+  transition: all 0.3s;
+  z-index: 2;
 }
 
-.reel-info {
+.reel-play-overlay:hover {
+  background: rgba(26, 24, 22, 0.6);
+}
+
+.reel-play-button {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  display: grid;
+  place-items: center;
+  color: var(--charcoal);
+  transition: all 0.3s;
+  box-shadow: 0 8px 32px rgba(212, 165, 116, 0.5);
+}
+
+.reel-play-overlay:hover .reel-play-button {
+  transform: scale(1.1);
+  box-shadow: 0 12px 48px rgba(212, 165, 116, 0.7);
+}
+
+.reel-info-overlay {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 24px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  padding: 32px;
+  background: linear-gradient(to top,
+      rgba(26, 24, 22, 0.95) 0%,
+      rgba(26, 24, 22, 0.7) 50%,
+      transparent 100%);
   display: flex;
+  justify-content: space-between;
   align-items: flex-end;
-  gap: 16px;
+  gap: 24px;
   z-index: 3;
+}
+
+.reel-info-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.reel-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 8px;
+  font-family: 'Playfair Display', serif;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.reel-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.reel-description {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.5;
+  margin-top: 8px;
 }
 
 .reel-actions {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  align-items: center;
+  flex-shrink: 0;
 }
 
 .reel-action-btn {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-  color: #fff;
-  cursor: pointer;
-  transition: all 0.2s;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 12px;
+  border-radius: 50%;
+  width: 64px;
+  height: 64px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 10px;
   font-weight: 600;
-  padding: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: 'DM Sans', sans-serif;
 }
 
 .reel-action-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
   transform: scale(1.1);
 }
 
-.reel-action-btn:active {
-  transform: scale(0.95);
+.reel-action-btn.active {
+  background: var(--accent-rose);
+  border-color: var(--accent-rose);
+  color: #fff;
 }
 
-/* Back to Home Button */
-.reels-back-btn {
-  position: fixed;
-  top: 90px;
-  left: 260px;
-  z-index: 20;
-  background: rgba(0, 0, 0, 0.7);
+.reel-action-btn.subscribed {
+  background: var(--accent-gold);
+  border-color: var(--accent-gold);
+  color: var(--charcoal);
+}
+
+.reel-action-label {
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 56px;
+}
+
+.reels-counter-badge {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(26, 24, 22, 0.8);
   backdrop-filter: blur(10px);
   color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  z-index: 10;
   border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.reels-scroll-hint {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(26, 24, 22, 0.8);
+  backdrop-filter: blur(10px);
+  color: #fff;
   padding: 12px 20px;
   border-radius: 24px;
-  cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  z-index: 10;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.2s;
+  animation: bounce-hint 2s infinite;
 }
 
-.reels-back-btn:hover {
-  background: rgba(0, 0, 0, 0.9);
-  transform: translateX(-4px);
-}
-
-/* Navigation dots on right side */
-.reels-nav-dots {
-  position: fixed;
-  right: 32px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  z-index: 10;
-}
-
-.reels-nav-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.4);
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.reels-nav-dot.active {
-  height: 32px;
-  background: #fff;
-}
-
-/* Counter at top center */
-.reels-counter {
-  position: fixed;
-  top: 100px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #fff;
-  fontSize: 14px;
-  font-weight: 600;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 8px 16px;
-  border-radius: 20px;
-  z-index: 10;
-}
-
-/* Scroll hint */
-.reels-scroll-hint {
-  position: fixed;
-  bottom: 120px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #fff;
-  fontSize: 12px;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 8px 16px;
-  border-radius: 20px;
-  z-index: 10;
-  animation: bounce 2s infinite;
-}
-
-/* Bounce animation */
-@keyframes bounce {
+@keyframes bounce-hint {
 
   0%,
   20%,
@@ -1530,49 +1587,170 @@ label {
   }
 }
 
-/* Mobile responsiveness for reels */
-@media (max-width: 768px) {
-  .reels-back-btn {
-    left: 80px;
-    top: 80px;
-    padding: 10px 16px;
-    font-size: 13px;
+.reels-progress-dots {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 10;
+}
+
+.reel-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.3s;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.reel-progress-dot:hover {
+  background: rgba(255, 255, 255, 0.5);
+  transform: scale(1.2);
+}
+
+.reel-progress-dot.active {
+  height: 32px;
+  background: var(--accent-gold);
+  border-color: var(--accent-gold);
+}
+
+/* Responsive Reels */
+@media (max-width: 1024px) {
+  .reel-info-overlay {
+    padding: 24px;
   }
 
-  .reels-nav-dots {
-    right: 16px;
-  }
-
-  .reels-counter {
-    top: 80px;
-  }
-
-  .reels-info {
-    padding: 16px;
-  }
-
-  .reel-action-btn {
-    width: 48px;
-    height: 48px;
+  .reel-title {
+    font-size: 20px;
   }
 
   .reel-actions {
     gap: 12px;
   }
 
+  .reel-action-btn {
+    width: 56px;
+    height: 56px;
+    padding: 10px;
+  }
+
+  .reels-progress-dots {
+    right: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .reels-scroll-container {
+    top: 0;
+  }
+
+  .reel-info-overlay {
+    padding: 20px 16px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .reel-actions {
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-around;
+  }
+
+  .reel-action-btn {
+    width: 52px;
+    height: 52px;
+  }
+
+  .reel-title {
+    font-size: 18px;
+  }
+
+  .reel-meta {
+    font-size: 11px;
+  }
+
+  .reel-description {
+    font-size: 13px;
+  }
+
+  .reels-counter-badge {
+    top: 20px;
+  }
+
+  .reels-progress-dots {
+    right: 16px;
+    gap: 8px;
+  }
+
+  .reel-progress-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .reel-progress-dot.active {
+    height: 24px;
+  }
+
   .reels-scroll-hint {
-    bottom: 100px;
+    bottom: 80px;
+    font-size: 11px;
+    padding: 10px 16px;
   }
 }
 
-/* When sidebar is expanded (desktop) */
+@media (max-width: 480px) {
+  .reel-info-overlay {
+    padding: 16px 12px;
+  }
+
+  .reel-title {
+    font-size: 16px;
+  }
+
+  .reel-action-btn {
+    width: 48px;
+    height: 48px;
+    padding: 8px;
+  }
+
+  .reel-action-label {
+    font-size: 8px;
+    max-width: 44px;
+  }
+
+  .reel-play-button {
+    width: 80px;
+    height: 80px;
+  }
+
+  .reels-scroll-hint {
+    bottom: 60px;
+  }
+}
+
+/* Sidebar collapsed state for reels */
 @media (min-width: 769px) {
-  .sidebar.expanded~.main .reels-back-btn {
-    left: 260px;
+  .app:has(.sidebar:not(.expanded)) .reels-scroll-container {
+    left: var(--sidebar-w-collapsed);
+  }
+
+  .app:has(.sidebar.expanded) .reels-scroll-container {
+    left: var(--sidebar-w-expanded);
   }
 }
 
-/* When sidebar is collapsed */
-.sidebar:not(.expanded)~.main .reels-back-btn {
-  left: 80px;
+/* Hide header on mobile for full screen reels */
+@media (max-width: 768px) {
+  .app:has(.reels-scroll-container) .header {
+    display: none;
+  }
+
+  .reels-scroll-container {
+    top: 0;
+  }
 }

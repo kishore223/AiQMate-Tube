@@ -5,10 +5,10 @@ import { doc, updateDoc, increment, addDoc, collection, setDoc, deleteDoc, onSna
 const Icons = {
   Heart: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>,
   HeartOutline: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>,
-  Play: () => <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>,
-  Pause: () => <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>,
-  Volume: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /></svg>,
-  VolumeX: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></svg>,
+  Play: () => <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>,
+  Volume: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /></svg>,
+  VolumeX: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" /></svg>,
+  ChevronDown: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>,
 };
 
 function ReelCard({ video, isActive, userId, onToggleSubscribe, isSubscribed }) {
@@ -19,8 +19,10 @@ function ReelCard({ video, isActive, userId, onToggleSubscribe, isSubscribed }) 
   const [likeCount, setLikeCount] = React.useState(video.likes || 0);
   const [tracked, setTracked] = React.useState(false);
   const startTimeRef = React.useRef(Date.now());
+  const lastUpdateRef = React.useRef(0);
+  const lastWatchTimeRef = React.useRef(0);
+  const completionTrackedRef = React.useRef(false);
 
-  // Listen to like status
   React.useEffect(() => {
     if (!userId || !video.id) return;
     const likeRef = doc(db, 'users', userId, 'likedVideos', video.id);
@@ -40,7 +42,6 @@ function ReelCard({ video, isActive, userId, onToggleSubscribe, isSubscribed }) 
     };
   }, [userId, video.id]);
 
-  // Auto-play when active
   React.useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
@@ -48,12 +49,10 @@ function ReelCard({ video, isActive, userId, onToggleSubscribe, isSubscribed }) 
     if (isActive) {
       vid.play().then(() => {
         setIsPlaying(true);
-      }).catch(err => {
-        console.log('Autoplay prevented:', err);
+      }).catch(() => {
         setIsPlaying(false);
       });
 
-      // Track view after 1 second
       const viewTimer = setTimeout(() => {
         trackView();
       }, 1000);
@@ -117,115 +116,133 @@ function ReelCard({ video, isActive, userId, onToggleSubscribe, isSubscribed }) 
 
   async function onTimeUpdate() {
     const v = videoRef.current;
-    if (!v || tracked || !userId) return;
+    if (!v || !userId) return;
+
+    const now = Date.now();
+    if (now - lastUpdateRef.current < 5000) return;
+
     const progress = v.duration ? (v.currentTime / v.duration) : 0;
-    if (v.currentTime >= 5 || progress >= 0.5) {
+    const sessionWatchTime = Math.floor((now - startTimeRef.current) / 1000);
+    const deltaWatchTime = Math.max(0, sessionWatchTime - lastWatchTimeRef.current);
+
+    if (deltaWatchTime > 0 || progress > 0) {
       try {
-        const watchTime = Math.floor((Date.now() - startTimeRef.current) / 1000);
-        await addDoc(collection(db, 'users', userId, 'history'), {
+        const updates = {
+          progress: Math.min(1, progress),
+          watchTime: increment(deltaWatchTime)
+        };
+
+        if (progress >= 0.9 && !completionTrackedRef.current) {
+          updates.completions = increment(1);
+          completionTrackedRef.current = true;
+        }
+
+        await setDoc(doc(db, 'users', userId, 'history', video.id), {
           videoId: video.id,
           title: video.title,
           channelName: video.channelName || 'Unknown',
           thumbnail: video.thumbnail || video.url,
           watchedAt: new Date().toISOString(),
-          progress: Math.min(1, progress),
-          watchTime: watchTime,
-          videoType: video.type || 'reel'
-        });
+          videoType: video.type || 'reel',
+          ...updates
+        }, { merge: true });
 
         await updateDoc(doc(db, 'videos', video.id), {
-          watchTime: increment(watchTime),
-          completions: progress >= 0.9 ? increment(1) : increment(0)
+          watchTime: increment(deltaWatchTime),
+          ...(progress >= 0.9 && updates.completions ? { completions: increment(1) } : {})
         });
+
+        lastWatchTimeRef.current = sessionWatchTime;
+        lastUpdateRef.current = now;
       } catch (e) {
         console.error('Error tracking history:', e);
       }
-      setTracked(true);
     }
   }
 
   return (
-    <div className="reel-card">
-      <video
-        ref={videoRef}
-        src={video.url}
-        className="reel-video"
-        loop
-        playsInline
-        muted={isMuted}
-        onTimeUpdate={onTimeUpdate}
-        onClick={togglePlayPause}
-      />
+    <div className="reel-scroll-item">
+      <div className="reel-video-wrapper">
+        <video
+          ref={videoRef}
+          src={video.url}
+          className="reel-video"
+          loop
+          playsInline
+          muted={isMuted}
+          onTimeUpdate={onTimeUpdate}
+          onClick={togglePlayPause}
+        />
 
-      {/* Play/Pause Overlay */}
-      {!isPlaying && (
-        <div className="reel-play-overlay" onClick={togglePlayPause}>
-          <div style={{
-            width: 80,
-            height: 80,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.3)',
-            backdropFilter: 'blur(10px)',
-            display: 'grid',
-            placeItems: 'center',
-            cursor: 'pointer'
-          }}>
-            <Icons.Play />
+        {!isPlaying && (
+          <div className="reel-play-overlay" onClick={togglePlayPause}>
+            <div className="reel-play-button">
+              <Icons.Play />
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Video Info Overlay */}
-      <div className="reel-info">
-        <div style={{ flex: 1 }}>
-          <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
-            {video.title}
-          </h3>
-          <div style={{ fontSize: 14, marginBottom: 4, color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
-            <strong>@{video.channelName || 'Unknown'}</strong>
+        <div className="reel-info-overlay">
+          <div className="reel-info-content">
+            <h3 className="reel-title">{video.title}</h3>
+            <div className="reel-meta">
+              <span className="tag tag-channel">@{video.channelName || 'Unknown'}</span>
+              <span>•</span>
+              <span>{video.views || 0} views</span>
+              <span>•</span>
+              <span>{likeCount} likes</span>
+            </div>
+            {video.description && (
+              <p className="reel-description">
+                {video.description.slice(0, 120)}{video.description.length > 120 ? '...' : ''}
+              </p>
+            )}
           </div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
-            {video.views || 0} views • {likeCount} likes
-          </div>
-          {video.description && (
-            <p style={{ fontSize: 13, marginTop: 8, color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.5)', maxWidth: '90%' }}>
-              {video.description.slice(0, 100)}{video.description.length > 100 ? '...' : ''}
-            </p>
-          )}
-        </div>
 
-        {/* Action Buttons */}
-        <div className="reel-actions">
-          <button
-            className="reel-action-btn"
-            onClick={handleLike}
-            style={{ color: liked ? '#ff4757' : '#fff' }}
-          >
-            {liked ? <Icons.Heart /> : <Icons.HeartOutline />}
-            <span style={{ fontSize: 12, marginTop: 4 }}>{likeCount}</span>
-          </button>
+          <div className="reel-actions">
+            <button
+              className={`reel-action-btn ${liked ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleLike();
+              }}
+              title={liked ? 'Unlike' : 'Like'}
+            >
+              {liked ? <Icons.Heart /> : <Icons.HeartOutline />}
+              <span className="reel-action-label">{likeCount}</span>
+            </button>
 
-          {video.channelId && (
+            {video.channelId && (
+              <button
+                className={`reel-action-btn ${isSubscribed ? 'subscribed' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleSubscribe(video.channelId);
+                }}
+                title={isSubscribed ? 'Unsubscribe' : 'Subscribe'}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  {isSubscribed && <polyline points="22 4 12 14.01 9 11.01" />}
+                  {!isSubscribed && <line x1="12" y1="8" x2="12" y2="16" />}
+                  {!isSubscribed && <line x1="8" y1="12" x2="16" y2="12" />}
+                </svg>
+                <span className="reel-action-label">{isSubscribed ? 'Subscribed' : 'Subscribe'}</span>
+              </button>
+            )}
+
             <button
               className="reel-action-btn"
-              onClick={() => onToggleSubscribe(video.channelId)}
-              style={{
-                background: isSubscribed ? 'rgba(255,255,255,0.2)' : 'var(--accent-gold)',
-                color: isSubscribed ? '#fff' : '#000',
-                fontSize: 11,
-                padding: '4px'
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMute();
               }}
+              title={isMuted ? 'Unmute' : 'Mute'}
             >
-              {isSubscribed ? 'Subscribed' : 'Subscribe'}
+              {isMuted ? <Icons.VolumeX /> : <Icons.Volume />}
+              <span className="reel-action-label">{isMuted ? 'Unmute' : 'Mute'}</span>
             </button>
-          )}
-
-          <button
-            className="reel-action-btn"
-            onClick={toggleMute}
-          >
-            {isMuted ? <Icons.VolumeX /> : <Icons.Volume />}
-          </button>
+          </div>
         </div>
       </div>
     </div>
@@ -238,7 +255,6 @@ export default function Reels({ videos, userId, onToggleSubscribe, subscribedCha
   const touchStartY = React.useRef(0);
   const isScrolling = React.useRef(false);
 
-  // Filter ONLY for reel type videos that are published
   const reelVideos = videos.filter(v => v.published === true && v.type === 'reel');
 
   React.useEffect(() => {
@@ -259,7 +275,7 @@ export default function Reels({ videos, userId, onToggleSubscribe, subscribedCha
 
       setTimeout(() => {
         isScrolling.current = false;
-      }, 500);
+      }, 600);
     }
 
     function handleTouchStart(e) {
@@ -284,7 +300,7 @@ export default function Reels({ videos, userId, onToggleSubscribe, subscribedCha
 
       setTimeout(() => {
         isScrolling.current = false;
-      }, 500);
+      }, 600);
     }
 
     container.addEventListener('wheel', handleWheel, { passive: false });
@@ -298,7 +314,6 @@ export default function Reels({ videos, userId, onToggleSubscribe, subscribedCha
     };
   }, [currentIndex, reelVideos.length]);
 
-  // Keyboard navigation
   React.useEffect(() => {
     function handleKeyDown(e) {
       if (e.key === 'ArrowDown' && currentIndex < reelVideos.length - 1) {
@@ -314,76 +329,67 @@ export default function Reels({ videos, userId, onToggleSubscribe, subscribedCha
 
   if (isLoading) {
     return (
-      <div className="reels-container" style={{ display: 'grid', placeItems: 'center' }}>
-        <div>
-          <div className="loading" />
-          <div style={{ marginTop: 20, color: '#fff', textAlign: 'center' }}>Loading reels...</div>
-        </div>
+      <div className="empty">
+        <div className="loading" />
+        <div className="empty-text" style={{ marginTop: 20 }}>Loading reels...</div>
       </div>
     );
   }
 
   if (reelVideos.length === 0) {
     return (
-      <div className="reels-container" style={{ display: 'grid', placeItems: 'center', textAlign: 'center' }}>
-        <div>
-          <div style={{ fontSize: 64, marginBottom: 16 }}>📱</div>
-          <h2 style={{ fontSize: 28, fontWeight: 800, color: '#fff', marginBottom: 8 }}>No Reels Yet</h2>
-          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 16 }}>
-            Upload your first video and mark it as a "Reel" to see it here
-          </p>
+      <div className="empty">
+        <div className="empty-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+            <line x1="7" y1="2" x2="7" y2="22" />
+            <line x1="17" y1="2" x2="17" y2="22" />
+            <line x1="2" y1="12" x2="22" y2="12" />
+          </svg>
+        </div>
+        <div className="empty-title">No Reels Yet</div>
+        <div className="empty-text">
+          Upload your first vertical video and mark it as a "Reel" to see it here
         </div>
       </div>
     );
   }
 
   return (
-    <div className="reels-container" ref={containerRef}>
-      {reelVideos.map((video, index) => (
-        <div
-          key={video.id}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            transform: `translateY(${(index - currentIndex) * 100}%)`,
-            transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-            opacity: index === currentIndex ? 1 : 0.3,
-            pointerEvents: index === currentIndex ? 'auto' : 'none'
-          }}
-        >
+    <div className="reels-scroll-container" ref={containerRef}>
+      <div className="reels-counter-badge">
+        {currentIndex + 1} / {reelVideos.length}
+      </div>
+
+      {currentIndex === 0 && reelVideos.length > 1 && (
+        <div className="reels-scroll-hint">
+          <Icons.ChevronDown />
+          <span>Scroll for more</span>
+        </div>
+      )}
+
+      <div className="reels-scroll-wrapper" style={{ transform: `translateY(-${currentIndex * 100}%)` }}>
+        {reelVideos.map((video, index) => (
           <ReelCard
+            key={video.id}
             video={video}
             isActive={index === currentIndex}
             userId={userId}
             onToggleSubscribe={onToggleSubscribe}
             isSubscribed={video.channelId && subscribedChannels.includes(video.channelId)}
           />
-        </div>
-      ))}
-
-      {/* Navigation Indicators */}
-      <div className="reels-nav-dots">
-        {reelVideos.map((_, index) => (
-          <div
-            key={index}
-            onClick={() => setCurrentIndex(index)}
-            className={`reels-nav-dot ${index === currentIndex ? 'active' : ''}`}
-          />
         ))}
       </div>
 
-      {/* Counter */}
-      <div className="reels-counter">
-        {currentIndex + 1} / {reelVideos.length}
-      </div>
-
-      {/* Scroll Hint */}
-      {currentIndex === 0 && reelVideos.length > 1 && (
-        <div className="reels-scroll-hint">
-          ↓ Scroll or swipe for more
+      {reelVideos.length > 1 && (
+        <div className="reels-progress-dots">
+          {reelVideos.map((_, index) => (
+            <div
+              key={index}
+              className={`reel-progress-dot ${index === currentIndex ? 'active' : ''}`}
+              onClick={() => setCurrentIndex(index)}
+            />
+          ))}
         </div>
       )}
     </div>

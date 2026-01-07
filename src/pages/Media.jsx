@@ -161,6 +161,7 @@ function EditModal({ video, onClose, onUpdate, userChannels, channels }) {
       };
 
       if (visibility === 'public') {
+        // Use global channels list
         const channel = channels.find(ch => ch.id === selectedChannel);
         if (channel) {
           updates.channelId = selectedChannel;
@@ -453,17 +454,12 @@ function EditModal({ video, onClose, onUpdate, userChannels, channels }) {
               {visibility === 'public' && (
                 <div className="input-group">
                   <label>Select Channel *</label>
-                  {userChannels.length === 0 ? (
-                    <div style={{ padding: 12, background: '#fff5f5', border: '1px solid #fed7d7', borderRadius: 4, color: '#c53030', fontSize: 13 }}>
-                      You need to create a channel first. Public videos must be published to a channel.
-                    </div>
-                  ) : (
-                    <select value={selectedChannel} onChange={e => setSelectedChannel(e.target.value)}>
-                      {userChannels.map(ch => (
-                        <option key={ch.id} value={ch.id}>{ch.name}</option>
-                      ))}
-                    </select>
-                  )}
+                  <select value={selectedChannel} onChange={e => setSelectedChannel(e.target.value)}>
+                    <option value="">-- Select Channel --</option>
+                    {channels.map(ch => (
+                      <option key={ch.id} value={ch.id}>{ch.name}</option>
+                    ))}
+                  </select>
                 </div>
               )}
 
@@ -854,7 +850,9 @@ export default function Media({ videos, user, onPlay, userChannels, channels }) 
     .filter(v => v.creatorId === user.uid || (v.collaborators && v.collaborators.includes(user.email)))
     .map(v => ({ ...v, isOwner: v.creatorId === user.uid }))
     .filter(v => {
-      const matchesSearch = v.title.toLowerCase().includes(searchTerm.toLowerCase());
+      const lowerTerm = searchTerm.toLowerCase();
+      const matchesSearch = v.title.toLowerCase().includes(lowerTerm) ||
+        (v.tags && v.tags.some(t => t.toLowerCase().includes(lowerTerm)));
       let matchesType = true;
       if (filterType === 'public') matchesType = v.published === true;
       if (filterType === 'private') matchesType = !v.published;
