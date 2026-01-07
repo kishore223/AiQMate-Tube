@@ -1754,3 +1754,261 @@ label {
     top: 0;
   }
 }
+
+/* -----------------------------------------------------------------------------
+ * MOBILE RESPONSIVE DESIGN
+ * -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+
+  /* --- LAYOUT TRANSFORMATION --- */
+
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    /* Fallback */
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* Reset grid override */
+  .app:has(.sidebar.expanded) {
+    grid-template-columns: 1fr;
+  }
+
+  /* --- BOTTOM NAVIGATION BAR (SIDEBAR) --- */
+
+  .sidebar,
+  .sidebar.expanded {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+
+    order: 2;
+    /* Move to bottom */
+    width: 100%;
+    height: auto;
+    min-height: 60px;
+    padding: 8px 16px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+
+    background: var(--deep-black);
+    border-right: none;
+    border-top: 1px solid rgba(212, 165, 116, 0.2);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 999;
+  }
+
+  /* Hide Desktop Elements */
+  .sidebar::before {
+    display: none;
+  }
+
+  .sidebar .brand {
+    display: none;
+  }
+
+  .sidebar .spacer {
+    display: none;
+  }
+
+  .sidebar .nav-btn span {
+    display: none !important;
+  }
+
+  /* Nav Container */
+  .sidebar .nav {
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-between;
+    padding: 0;
+    gap: 0;
+  }
+
+  /* Nav Items */
+  .sidebar .nav-btn,
+  .sidebar.expanded .nav-btn {
+    flex-direction: column;
+    width: auto;
+    height: auto;
+    min-height: auto;
+    padding: 8px;
+    gap: 0;
+    border-radius: 8px;
+    background: transparent !important;
+    /* Remove background on mobile to keep it clean */
+  }
+
+  /* Active Indicator */
+  .nav-btn::before {
+    display: none;
+  }
+
+  /* Remove side border */
+
+  .nav-btn.active {
+    color: var(--accent-gold);
+  }
+
+  .nav-btn.active .nav-icon {
+    transform: translateY(-2px);
+    filter: drop-shadow(0 0 8px rgba(212, 165, 116, 0.6));
+  }
+
+  .nav-icon {
+    width: 24px;
+    height: 24px;
+    margin-bottom: 0;
+  }
+
+  /* Logout Button */
+  .sidebar>.nav-btn:last-child {
+    display: none;
+    /* Often safe to hide logout on main nav or move it, but user didn't ask. Let's keep it if space permits or hide it since it's "Sign Out". usually profile handles it. Let's hide separate logout to save space. */
+  }
+
+  /* --- MAIN CONTENT AREA --- */
+
+  .main {
+    order: 1;
+    flex: 1;
+    height: auto;
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+  }
+
+  .content {
+    padding: 16px;
+    padding-bottom: 80px;
+    /* Extra padding for scrolling content above nav */
+  }
+
+  /* HEADER */
+  .header {
+    padding: 12px 16px;
+    min-height: 60px;
+  }
+
+  .header-message {
+    font-size: 13px;
+  }
+
+  .header-actions .btn {
+    padding: 8px 12px;
+  }
+
+  .header-title h1 {
+    font-size: 22px;
+  }
+
+  .header-subtitle {
+    font-size: 10px;
+  }
+
+  /* COMPONENT ADAPTATIONS */
+
+  /* Grid */
+  .grid {
+    grid-template-columns: 1fr;
+    /* Single column */
+    gap: 16px;
+  }
+
+  /* Cards */
+  .video-thumb {
+    aspect-ratio: 16/9;
+  }
+
+  /* Modals - Full Screen Sheet */
+  .modal {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-surface {
+    border-radius: 16px 16px 0 0;
+    width: 100%;
+    max-width: 100%;
+    height: 90dvh;
+    /* Slide up sheet style */
+    max-height: 90dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 40px;
+  }
+
+  /* Video Player Specifics */
+  .player {
+    height: 100%;
+    /* Full screen player */
+    max-height: 100%;
+    border-radius: 0;
+    background: #000;
+    flex-direction: column;
+    display: flex;
+  }
+
+  .player-video {
+    width: 100%;
+    aspect-ratio: 16/9;
+    flex-grow: 0;
+  }
+
+  .player-header {
+    background: var(--cream);
+    flex: 1;
+    order: 2;
+    /* Meta below video */
+    overflow-y: auto;
+    flex-direction: column;
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .player-info {
+    width: 100%;
+  }
+
+  .player-title {
+    font-size: 18px;
+  }
+
+  .player-actions {
+    width: 100%;
+    justify-content: space-between;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-light);
+  }
+
+  /* REELS FIXES */
+  .reels-scroll-container,
+  .app:has(.sidebar:not(.expanded)) .reels-scroll-container,
+  .app:has(.sidebar.expanded) .reels-scroll-container {
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    z-index: 10;
+  }
+
+  /* Adjust reel overlay for mobile safe areas */
+  .reel-info-overlay {
+    bottom: 0;
+    /* Let it sit naturally, maybe offset by nav if nav is visible */
+    /* If we want nav visible over reels: */
+    padding-bottom: 80px;
+  }
+
+  /* Ensure nav is above reels if we want to navigate away */
+  .sidebar {
+    z-index: 1000;
+  }
+}
