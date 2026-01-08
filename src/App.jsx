@@ -7,6 +7,7 @@ import Profile from './pages/Profile';
 import Media from './pages/Media';
 import Auth from './pages/Auth';
 import Admin from './pages/Admin';
+import Watch from './pages/Watch';
 
 // Firebase Imports
 import { db, storage, auth } from './firebase';
@@ -544,170 +545,7 @@ function AddVideoModal({ onClose, onUpload, userChannels }) {
   );
 }
 
-function VideoPlayer({ meta, onClose, onToggleSubscribe, userId, userSubscribedChannels }) {
-  const [tracked, setTracked] = React.useState(false); // Used for initial view count only
-  const videoRef = React.useRef(null);
-  const isSubbed = meta.channelId && userSubscribedChannels.includes(meta.channelId);
-  const startTimeRef = React.useRef(Date.now());
-  const lastUpdateRef = React.useRef(0);
-  const lastWatchTimeRef = React.useRef(0);
-  const completionTrackedRef = React.useRef(false);
 
-  const [liked, setLiked] = React.useState(false);
-  const [likeCount, setLikeCount] = React.useState(meta.likes || 0);
-
-  React.useEffect(() => {
-    if (!userId || !meta.id) return;
-    const likeRef = doc(db, 'users', userId, 'likedVideos', meta.id);
-    const unsub = onSnapshot(likeRef, (snap) => {
-      setLiked(snap.exists());
-    });
-    const videoRefDoc = doc(db, 'videos', meta.id);
-    const unsubVideo = onSnapshot(videoRefDoc, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setLikeCount(data.likes || 0);
-      }
-    });
-
-    return () => {
-      unsub();
-      unsubVideo();
-    };
-  }, [userId, meta.id]);
-
-  async function handleLike() {
-    if (!userId) return alert("Sign in to like.");
-    const videoRefDoc = doc(db, 'videos', meta.id);
-    const userLikeRef = doc(db, 'users', userId, 'likedVideos', meta.id);
-
-    try {
-      if (liked) {
-        await deleteDoc(userLikeRef);
-        await updateDoc(videoRefDoc, { likes: increment(-1) });
-      } else {
-        await setDoc(userLikeRef, { likedAt: new Date().toISOString() });
-        await updateDoc(videoRefDoc, { likes: increment(1) });
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }
-
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        if (!meta.provider || meta.provider !== 'youtube') {
-          videoRef.current?.play();
-        }
-        trackView();
-      } catch { }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  async function trackView() {
-    try {
-      await updateDoc(doc(db, 'videos', meta.id), {
-        views: increment(1),
-        lastViewedAt: new Date().toISOString()
-      });
-    } catch (e) {
-      console.error('Error tracking view:', e);
-    }
-  }
-
-  async function onTime() {
-    const v = videoRef.current;
-    if (!v || !userId || (meta.provider === 'youtube')) return;
-
-    const now = Date.now();
-    // Throttle updates to every 5 seconds to prevent excessive writes
-    if (now - lastUpdateRef.current < 5000) return;
-
-    const progress = v.duration ? (v.currentTime / v.duration) : 0;
-    const sessionWatchTime = Math.floor((now - startTimeRef.current) / 1000);
-    const deltaWatchTime = Math.max(0, sessionWatchTime - lastWatchTimeRef.current);
-
-    if (deltaWatchTime > 0 || progress > 0) {
-      try {
-        const updates = {
-          progress: Math.min(1, progress),
-          watchTime: increment(deltaWatchTime)
-        };
-
-        // Handle completion (only once per session)
-        if (progress >= 0.9 && !completionTrackedRef.current) {
-          updates.completions = increment(1);
-          completionTrackedRef.current = true;
-        }
-
-        await setDoc(doc(db, 'users', userId, 'history', meta.id), {
-          videoId: meta.id,
-          title: meta.title,
-          channelName: meta.channelName || 'Unknown',
-          thumbnail: meta.url,
-          watchedAt: new Date().toISOString(),
-          videoType: meta.type || 'standard',
-          ...updates
-        }, { merge: true });
-
-        // Update global video stats
-        await updateDoc(doc(db, 'videos', meta.id), {
-          watchTime: increment(deltaWatchTime),
-          ...(progress >= 0.9 && updates.completions ? { completions: increment(1) } : {})
-        });
-
-        lastWatchTimeRef.current = sessionWatchTime;
-        lastUpdateRef.current = now;
-      } catch (e) {
-        console.error('Error tracking history:', e);
-      }
-    }
-  }
-
-  return (
-    <div className="modal" onClick={onClose}>
-      <div className="player" onClick={e => e.stopPropagation()}>
-        <div className="player-header">
-          <div className="player-info">
-            <h2 className="player-title">{meta.title}</h2>
-            <div className="player-meta">
-              <span className="tag tag-channel">{meta.channelName}</span>
-              <span style={{ marginLeft: 12, fontSize: 13, opacity: 0.8 }}>
-                {meta.views || 0} views • {likeCount} likes
-              </span>
-            </div>
-          </div>
-          <div className="player-actions">
-            <button className={`btn ${liked ? 'btn-primary' : 'btn-secondary'}`} onClick={handleLike}>
-              {liked ? 'Liked' : 'Like'} ({likeCount})
-            </button>
-            {meta.channelId && (
-              <button className="btn btn-secondary" onClick={() => onToggleSubscribe(meta.channelId)}>
-                {isSubbed ? 'Unsubscribe' : 'Subscribe'}
-              </button>
-            )}
-            <button className="btn btn-danger" onClick={onClose}><Icons.Close /></button>
-          </div>
-        </div>
-        {meta.provider === 'youtube' ? (
-          <iframe
-            src={meta.url}
-            className="player-video"
-            title={meta.title}
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            style={{ width: '100%', aspectRatio: '16/9' }}
-          />
-        ) : (
-          meta.url ? <video ref={videoRef} src={meta.url} className="player-video" controls playsInline onTimeUpdate={onTime} /> : <div className="empty">Error</div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function App() {
   const [user, setUser] = React.useState(null);
@@ -935,38 +773,51 @@ export default function App() {
 
   return (
     <div className="app">
-      <Sidebar active={active} onSelect={setActive} onLogout={handleLogout} userRole={userRole} />
+      <Sidebar
+        active={active}
+        onSelect={(page) => {
+          setActive(page);
+          setPlaying(null);
+        }}
+        onLogout={handleLogout}
+        userRole={userRole}
+      />
       <main className="main">
         <Header page={active} onAdd={() => setShowAdd(true)} user={user} />
         <div className="content">
-          {active === 'home' && <Home videos={homeVideos} {...pageProps} />}
-          {active === 'reels' && (
-            <Reels
-              videos={reelsVideos}
-              userId={user.uid}
+          {playing ? (
+            <Watch
+              video={playing}
+              videos={videos}
+              onPlay={setPlaying}
+              user={user}
               onToggleSubscribe={toggleSubscribe}
               subscribedChannels={subscribedChannels}
-              isLoading={isLoading}
-              onPlay={setPlaying}
+              onBack={() => setPlaying(null)}
             />
+          ) : (
+            <>
+              {active === 'home' && <Home videos={homeVideos} {...pageProps} />}
+              {active === 'reels' && (
+                <Reels
+                  videos={reelsVideos}
+                  userId={user.uid}
+                  onToggleSubscribe={toggleSubscribe}
+                  subscribedChannels={subscribedChannels}
+                  isLoading={isLoading}
+                  onPlay={setPlaying}
+                />
+              )}
+              {active === 'media' && <Media videos={videos} {...pageProps} />}
+              {active === 'channels' && <Channels {...pageProps} videos={videos} />}
+              {active === 'history' && <History userId={user.uid} videos={videos} onReplay={setPlaying} />}
+              {active === 'profile' && <Profile videos={videos} channels={userChannels} user={user} />}
+              {active === 'admin' && <Admin user={user} />}
+            </>
           )}
-          {active === 'media' && <Media videos={videos} {...pageProps} />}
-          {active === 'channels' && <Channels {...pageProps} videos={videos} />}
-          {active === 'history' && <History userId={user.uid} videos={videos} onReplay={setPlaying} />}
-          {active === 'profile' && <Profile videos={videos} channels={userChannels} user={user} />}
-          {active === 'admin' && <Admin user={user} />}
         </div>
       </main>
       {showAdd && <AddVideoModal onClose={() => setShowAdd(false)} onUpload={handleUpload} userChannels={userChannels} />}
-      {playing && (
-        <VideoPlayer
-          meta={playing}
-          onClose={() => setPlaying(null)}
-          onToggleSubscribe={toggleSubscribe}
-          userId={user.uid}
-          userSubscribedChannels={subscribedChannels}
-        />
-      )}
     </div>
   );
 }
