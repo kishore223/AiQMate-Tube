@@ -123,7 +123,7 @@ function Sidebar({ active, onSelect, onLogout, userRole }) {
 function Header({ page, onAdd, user }) {
   const titles = {
     home: { title: 'Home', subtitle: `Welcome back, ${user.displayName || 'User'}` },
-    reels: { title: 'Reels', subtitle: 'Short-form vertical videos' },
+    reels: { title: 'Reels', subtitle: 'Short vertical videos' },
     media: { title: 'My Media', subtitle: 'Manage content & collaborations' },
     channels: { title: 'Channels', subtitle: 'Discover and subscribe to creators' },
     history: { title: 'Watch History', subtitle: 'Videos you\'ve watched recently' },

@@ -81,17 +81,9 @@ function EditModal({ video, onClose, onUpdate, userChannels, channels }) {
   const [collaborators, setCollaborators] = React.useState(video.collaborators || []);
   const [collabEmail, setCollabEmail] = React.useState('');
 
-  // Monetization Tab
-  const [monetized, setMonetized] = React.useState(video.monetized || false);
-  const [adBreaks, setAdBreaks] = React.useState(video.adBreaks || []);
-
   // Subtitles Tab
   const [subtitles, setSubtitles] = React.useState(video.subtitles || []);
   const [newSubtitleLang, setNewSubtitleLang] = React.useState('');
-
-  // Music Tab
-  const [soundtrack, setSoundtrack] = React.useState(video.soundtrack || '');
-  const [audioLanguage, setAudioLanguage] = React.useState(video.audioLanguage || 'English');
 
   // Advanced Tab
   const [videoType, setVideoType] = React.useState(video.type || 'standard');
@@ -207,22 +199,6 @@ function EditModal({ video, onClose, onUpdate, userChannels, channels }) {
     }
   }
 
-  async function handleSaveMonetization() {
-    setLoading(true);
-    try {
-      await updateDoc(doc(db, 'videos', video.id), {
-        monetized,
-        adBreaks,
-        updatedAt: new Date().toISOString()
-      });
-      onUpdate?.();
-      alert('Monetization settings saved!');
-    } catch (e) {
-      alert('Error: ' + e.message);
-    }
-    setLoading(false);
-  }
-
   async function handleSaveSubtitles() {
     setLoading(true);
     try {
@@ -232,22 +208,6 @@ function EditModal({ video, onClose, onUpdate, userChannels, channels }) {
       });
       onUpdate?.();
       alert('Subtitles saved!');
-    } catch (e) {
-      alert('Error: ' + e.message);
-    }
-    setLoading(false);
-  }
-
-  async function handleSaveMusic() {
-    setLoading(true);
-    try {
-      await updateDoc(doc(db, 'videos', video.id), {
-        soundtrack,
-        audioLanguage,
-        updatedAt: new Date().toISOString()
-      });
-      onUpdate?.();
-      alert('Music settings saved!');
     } catch (e) {
       alert('Error: ' + e.message);
     }
@@ -291,8 +251,6 @@ function EditModal({ video, onClose, onUpdate, userChannels, channels }) {
     { id: 'visibility', label: 'Visibility', icon: Icons.Eye },
     { id: 'collaboration', label: 'Collaboration', icon: Icons.Users },
     { id: 'subtitles', label: 'Subtitles', icon: Icons.Subtitles },
-    { id: 'music', label: 'Music', icon: Icons.Music },
-    { id: 'monetization', label: 'Monetization', icon: Icons.DollarSign },
     { id: 'advanced', label: 'Advanced', icon: Icons.Settings },
   ];
 
@@ -633,76 +591,7 @@ function EditModal({ video, onClose, onUpdate, userChannels, channels }) {
             </div>
           )}
 
-          {/* MUSIC TAB */}
-          {activeTab === 'music' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div className="input-group">
-                <label><Icons.Music /> Soundtrack / Background Music</label>
-                <input
-                  type="text"
-                  value={soundtrack}
-                  onChange={e => setSoundtrack(e.target.value)}
-                  placeholder="Song name and artist"
-                />
-              </div>
 
-              <div className="input-group">
-                <label>Audio Language</label>
-                <select value={audioLanguage} onChange={e => setAudioLanguage(e.target.value)}>
-                  <option value="English">English</option>
-                  <option value="Spanish">Spanish</option>
-                  <option value="French">French</option>
-                  <option value="German">German</option>
-                  <option value="Portuguese">Portuguese</option>
-                  <option value="Japanese">Japanese</option>
-                  <option value="Korean">Korean</option>
-                  <option value="Mandarin">Mandarin</option>
-                  <option value="Hindi">Hindi</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              <button className="btn btn-primary" onClick={handleSaveMusic} disabled={loading}>
-                {loading ? 'Saving...' : 'Save Music Settings'}
-              </button>
-            </div>
-          )}
-
-          {/* MONETIZATION TAB */}
-          {activeTab === 'monetization' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div style={{ padding: 16, background: 'var(--off-white)', borderRadius: 4 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={monetized}
-                    onChange={e => setMonetized(e.target.checked)}
-                  />
-                  <div>
-                    <div style={{ fontWeight: 600 }}><Icons.DollarSign /> Enable Monetization</div>
-                    <div className="small">Allow ads on this video to earn revenue</div>
-                  </div>
-                </label>
-              </div>
-
-              {monetized && (
-                <div className="input-group">
-                  <label>Ad Break Positions (in seconds)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., 30, 60, 120"
-                    value={adBreaks.join(', ')}
-                    onChange={e => setAdBreaks(e.target.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)))}
-                  />
-                  <div className="small">Add mid-roll ads at specific timestamps</div>
-                </div>
-              )}
-
-              <button className="btn btn-primary" onClick={handleSaveMonetization} disabled={loading}>
-                {loading ? 'Saving...' : 'Save Monetization Settings'}
-              </button>
-            </div>
-          )}
 
           {/* ADVANCED TAB */}
           {activeTab === 'advanced' && (

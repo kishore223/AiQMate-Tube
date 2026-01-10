@@ -13,9 +13,15 @@ function HistoryItem({ entry, onReplay, videos, onDelete }) {
   return (
     <div className="history-item">
       <div className="history-thumb" onClick={() => video && onReplay(video)}>
-        {video ? (
+        {(entry.thumbnail || video?.url) ? (
           <>
-            <video src={video.url} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <video
+              src={video?.url || entry.thumbnail}
+              muted
+              playsInline
+              preload="metadata"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
             <div className="video-thumb-overlay">
               <div className="play-icon" style={{ width: 40, height: 40 }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
